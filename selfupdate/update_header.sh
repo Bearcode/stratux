@@ -12,11 +12,11 @@ fi
 if [ ! -d "/root/log" ]; then
   rm /root/stratux.log
   mkdir /root/log
-  mv /root/stratux.sqlite /root/log/stratux.sqlite
+  mv /root/stratux.sql* /root/log/
 fi
 
 rm -rf /root/stratux-update
 mkdir -p /root/stratux-update
 cd /root/stratux-update
-mv -f /log/log/stratux.sqlite /root/log/stratux.sqlite.`date +%s`
-rm -f /log/log/stratux.sqlite-wal /root/log/stratux.sqlite-shm
+mv -f /root/log/stratux.sqlite /root/log/stratux.sqlite.`date +%s`
+rm -f /root/log/stratux.sqlite-wal /root/log/stratux.sqlite-shm
