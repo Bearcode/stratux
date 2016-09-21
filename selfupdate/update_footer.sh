@@ -20,8 +20,8 @@ chmod 744 /root/stratux-pre-start.sh
 ln -fs /lib/systemd/system/stratux.service /etc/systemd/system/multi-user.target.wants/stratux.service
 
 #wifi config
-cp -f hostapd.conf /etc/hostapd/hostapd.conf
-cp -f hostapd-edimax.conf /etc/hostapd/hostapd-edimax.conf
+#cp -f hostapd.conf /etc/hostapd/hostapd.conf
+#cp -f hostapd-edimax.conf /etc/hostapd/hostapd-edimax.conf
 
 #WiFi Config Manager
 cp -f hostapd_manager.sh /usr/sbin/
@@ -61,3 +61,7 @@ cd web/ && make stratuxBuild=${stratuxBuild}
 # Remove old Wi-Fi watcher script.
 rm -f /usr/sbin/wifi_watch.sh
 sed -i "/\bwifi_watch\b/d" /etc/rc.local
+
+# Make filesystem read-only
+ro
+
