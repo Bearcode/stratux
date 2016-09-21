@@ -470,7 +470,14 @@ func managementInterface() {
 	trafficUpdate = NewUIBroadcaster()
 
 	http.HandleFunc("/", defaultServer)
-	http.Handle("/logs/", http.StripPrefix("/logs/", http.FileServer(http.Dir("/var/log"))))
+	
+	var logPath string
+	if _, err := os.Stat("/etc/FlightBox"); !os.IsNotExist(err) {
+		logPath = "/root/log"
+	} else { // if not using the FlightBox config, use "normal" log file locations
+		logPath = "/var/log"
+	}
+	http.Handle("/logs/", http.StripPrefix("/logs/", http.FileServer(http.Dir(logPath))))
 	http.HandleFunc("/view_logs/", viewLogs)
 
 	http.HandleFunc("/status",
