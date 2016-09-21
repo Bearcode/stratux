@@ -1,0 +1,65 @@
+#!/bin/bash
+
+# Resize the 4th filesystem of a Raspbian image to use all remaining space.
+# Directly equivalent to the expand_rootfs section of raspi-config.
+# No claims of originality are made.
+#
+# Steve Sokol - September 16, 2016 
+#
+# No warranty is implied.  Use at your own risk.
+#
+
+# only execute if this is a FlightBox system
+if ! [ -f "/etc/FlightBox" ]; then
+	echo "This script is only valid on FlightBox systems"
+	exit 1
+fi
+
+# only run as root
+if [ $(id -u) -ne 0 ]; then
+     echo "Script must be run as root.  Try 'sudo ./raspi-expand rootfs.sh'"
+     exit 1
+fi
+
+# stop stratux so the log is not active
+systemctl stop stratux.service
+
+# unmount the 4th filesystem
+umount /root
+
+# Get the starting offset of the 4th partition
+PART_START=$(parted /dev/mmcblk0 -ms unit s p | grep "^4" | cut -f 2 -d:)
+
+# Remove the "s" that gets tacked on to indicate sectors
+PART_START=${PART_START::-1}
+
+# Bail if we got nothing
+[ "$PART_START" ] || return 1
+
+# delete and recreate the 4th filesystem
+fdisk /dev/mmcblk0 <<EOF
+p
+d
+4
+n
+p
+$PART_START
+
+p
+w
+EOF
+
+# force the kernel to reload the partition table
+partprobe /dev/mmcblk0
+
+# expand the filesystem to the new size
+resize2fs /dev/mmcblk0p4
+
+# re-mount the 4th filesystem
+mount /root
+
+# restart stratux
+systemctl start stratux.service
+
+# return success
+exit 0
