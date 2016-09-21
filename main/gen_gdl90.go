@@ -46,8 +46,8 @@ const (
 	debugLog       = "/var/log/stratux.log"
 	dataLogFile    = "/var/log/stratux.sqlite"
 	//FlightBox: log to /root.
-	debugLog_FB         = "/root/stratux.log"
-	dataLogFile_FB      = "/var/log/stratux.sqlite"
+	debugLog_FB         = "/root/log/stratux.log"
+	dataLogFile_FB      = "/root/log/stratux.sqlite"
 	maxDatagramSize     = 8192
 	maxUserMsgQueueSize = 25000 // About 10MB per port per connected client.
 
@@ -876,7 +876,8 @@ func parseInput(buf string) ([]byte, uint16) {
 	}
 
 	MsgLog = append(MsgLog, thisMsg)
-	logMsg(thisMsg)
+//TODO: put this on a switch so we only log messages if "Log Raw ADS-B Messages" is enabled
+//	logMsg(thisMsg)
 
 	return frame, msgtype
 }

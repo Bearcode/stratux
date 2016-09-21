@@ -425,7 +425,13 @@ type dirlisting struct {
 //FIXME: This needs to be switched to show a "sessions log" from the sqlite database.
 func viewLogs(w http.ResponseWriter, r *http.Request) {
 
-	names, err := ioutil.ReadDir("/var/log/stratux/")
+//TODO: This may not work - do I have to declare the vars since they're in an if block?
+
+	if _, err := os.Stat("/etc/FlightBox"); !os.IsNotExist(err) {
+		names, err := ioutil.ReadDir("/root/log/")
+	} else { // if not using the FlightBox config, use "normal" log file locations
+		names, err := ioutil.ReadDir("/var/log/stratux/")
+	}
 	if err != nil {
 		return
 	}

@@ -624,7 +624,8 @@ func esListen() {
 			var eslog esmsg
 			eslog.TimeReceived = stratuxClock.Time
 			eslog.Data = buf
-			logESMsg(eslog) // log raw dump1090:30006 output to SQLite log
+//TODO: Put this on a switch so it only gets logged if "Record Raw ADS-B Messages" is enabled
+//			logESMsg(eslog) // log raw dump1090:30006 output to SQLite log
 
 			var newTi *dump1090Data
 			err = json.Unmarshal([]byte(buf), &newTi)
