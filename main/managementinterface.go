@@ -425,7 +425,7 @@ type dirlisting struct {
 //FIXME: This needs to be switched to show a "sessions log" from the sqlite database.
 func viewLogs(w http.ResponseWriter, r *http.Request) {
 
-	var logPath
+	var logPath string
 	
 	if _, err := os.Stat("/etc/FlightBox"); !os.IsNotExist(err) {
 		logPath = "/root/log/"
