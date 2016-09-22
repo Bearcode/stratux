@@ -315,7 +315,7 @@ func insertData(i interface{}, tbl string, db *sql.DB, ts_num int64) int64 {
 		}
 */
 //		values = append(values, strconv.FormatInt(dataLogTimestamps[ts_num].id, 10))
-		values = append(values, strconv.FormatInt(stratuxClock.Time, 10))
+		values = append(values, strconv.FormatInt(stratuxClock.Milliseconds, 10))
 		keys = append(keys, "startup_id")
 		values = append(values, strconv.FormatInt(stratuxStartupID, 10))
 	}
