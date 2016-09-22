@@ -315,9 +315,9 @@ func insertData(i interface{}, tbl string, db *sql.DB, ts_num int64) int64 {
 		}
 */
 //		values = append(values, strconv.FormatInt(dataLogTimestamps[ts_num].id, 10))
-		values = append(values, stratuxClock.Time)
+		values = append(values, strconv.FormatInt(stratuxClock.Time, 10))
 		keys = append(keys, "startup_id")
-		values = append(values, stratuxStartupID)
+		values = append(values, strconv.FormatInt(stratuxStartupID, 10))
 	}
 
 //TODO: create and cache a statement for each table - no reason to re-create each time
