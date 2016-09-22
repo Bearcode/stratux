@@ -206,8 +206,9 @@ func makeTable(i interface{}, tbl string, db *sql.DB) {
 	// Add the timestamp_id field to link up with the timestamp table.
 	if tbl != "timestamp" && tbl != "startup" {
 		fields = append(fields, "timestamp_id INTEGER")
+		fields = append(fields, "startup_id INTEGER")
 	}
-
+	
 	tblCreate := fmt.Sprintf("CREATE TABLE %s (id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, %s)", tbl, strings.Join(fields, ", "))
 
 	_, err := db.Exec(tblCreate)
@@ -304,6 +305,7 @@ func insertData(i interface{}, tbl string, db *sql.DB, ts_num int64) int64 {
 	// Add the timestamp_id field to link up with the timestamp table.
 	if tbl != "timestamp" && tbl != "startup" {
 		keys = append(keys, "timestamp_id")
+/*
 		if dataLogTimestamps[ts_num].id == 0 {
 			//FIXME: This is somewhat convoluted. When insertData() is called for a ts_num that corresponds to a timestamp with no database id,
 			// then it inserts that timestamp via the same interface and the id is updated in the structure via the below lines
@@ -311,9 +313,14 @@ func insertData(i interface{}, tbl string, db *sql.DB, ts_num int64) int64 {
 			dataLogTimestamps[ts_num].StartupID = stratuxStartupID
 			insertData(dataLogTimestamps[ts_num], "timestamp", db, ts_num) // Updates dataLogTimestamps[ts_num].id.
 		}
-		values = append(values, strconv.FormatInt(dataLogTimestamps[ts_num].id, 10))
+*/
+//		values = append(values, strconv.FormatInt(dataLogTimestamps[ts_num].id, 10))
+		values = append(values, stratuxClock.Time)
+		keys = append(keys, "startup_id")
+		values = append(values, stratuxStartupID)
 	}
 
+//TODO: create and cache a statement for each table - no reason to re-create each time
 	if _, ok := insertString[tbl]; !ok {
 		// Prepare the statement.
 		tblInsert := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", tbl, strings.Join(keys, ","),
