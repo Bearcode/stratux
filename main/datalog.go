@@ -41,6 +41,8 @@ type StratuxTimestamp struct {
 type StratuxStartup struct {
 	id   int64
 	Fill string
+	start int64 // starting timestamp in ms (epoch)
+	duration int64 // duration of the flight in seconds
 }
 
 var dataLogStarted bool
@@ -540,7 +542,23 @@ func isDataLogReady() bool {
 
 func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
+		if globalSettings.flightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
+			now := stratuxClock.Milliseconds()
+			msd := (now - lastSituationLogMs)
+			
+			// logbook is 30 seconds (30,000 ms)
+			if (globalSettings.flightLoglevel == FLIGHT_LOG_LEVEL_LOGBOOK) && (msd < 30000) {
+				return;
+			}
+			
+			// debrief is 2 Hz (500 ms)
+			if (globalSettings.flightLoglevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (msd < 500) {
+				return;
+			}
+			
+		}
 		dataLogChan <- DataLogRow{tbl: "mySituation", data: mySituation}
+		lastSituationLogMs = now
 	}
 }
 
@@ -557,25 +575,25 @@ func logSettings() {
 }
 
 func logTraffic(ti TrafficInfo) {
-	if globalSettings.ReplayLog && isDataLogReady() {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.flightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) {
 		dataLogChan <- DataLogRow{tbl: "traffic", data: ti}
 	}
 }
 
 func logMsg(m msg) {
-	if globalSettings.ReplayLog && isDataLogReady() {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.flightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF)  {
 		dataLogChan <- DataLogRow{tbl: "messages", data: m}
 	}
 }
 
 func logESMsg(m esmsg) {
-	if globalSettings.ReplayLog && isDataLogReady() {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.flightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) {
 		dataLogChan <- DataLogRow{tbl: "es_messages", data: m}
 	}
 }
 
 func logDump1090TermMessage(m Dump1090TermMessage) {
-	if globalSettings.DEBUG && globalSettings.ReplayLog && isDataLogReady() {
+	if globalSettings.DEBUG && globalSettings.ReplayLog && isDataLogReady() && (globalSettings.flightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) {
 		dataLogChan <- DataLogRow{tbl: "dump1090_terminal", data: m}
 	}
 }

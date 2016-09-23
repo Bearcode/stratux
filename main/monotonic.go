@@ -43,6 +43,10 @@ func (m *monotonic) Unix() int64 {
 	return int64(m.Since(time.Time{}).Seconds())
 }
 
+func (m *monotonic) Milliseconds() int64 {
+	return int64(m.Since(time.Time{}).Milliseconds())
+}
+
 func NewMonotonic() *monotonic {
 	t := &monotonic{Milliseconds: 0, Time: time.Time{}, ticker: time.NewTicker(10 * time.Millisecond)}
 	go t.Watcher()

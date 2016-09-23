@@ -75,6 +75,12 @@ const (
 
 	LON_LAT_RESOLUTION = float32(180.0 / 8388608.0)
 	TRACK_RESOLUTION   = float32(360.0 / 256.0)
+	
+	FLIGHT_LOG_LEVEL_OFF     = 0
+	FLIGHT_LOG_LEVEL_LOGBOOK = 1
+	FLIGHT_LOG_LEVEL_DEBRIEF = 2
+	FLIGHT_LOG_LEVEL_DEMO    = 3
+	FLIGHT_LOG_LEVEL_DEBUG   = 4
 )
 
 var usage *du.DiskUsage
@@ -876,8 +882,7 @@ func parseInput(buf string) ([]byte, uint16) {
 	}
 
 	MsgLog = append(MsgLog, thisMsg)
-//TODO: put this on a switch so we only log messages if "Log Raw ADS-B Messages" is enabled
-//	logMsg(thisMsg)
+	logMsg(thisMsg)
 
 	return frame, msgtype
 }
@@ -968,6 +973,7 @@ type settings struct {
 	PPM                  int
 	OwnshipModeS         string
 	WatchList            string
+	FlightLogLevel       int
 }
 
 type status struct {
@@ -1020,6 +1026,7 @@ func defaultSettings() {
 	globalSettings.DisplayTrafficSource = false
 	globalSettings.ReplayLog = false //TODO: 'true' for debug builds.
 	globalSettings.OwnshipModeS = "F00000"
+	globalSettings.FlightLogLevel = FLIGHT_LOG_LEVEL_DEBRIEF
 }
 
 func readSettings() {
