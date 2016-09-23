@@ -232,7 +232,7 @@ func handleSettingsSetRequest(w http.ResponseWriter, r *http.Request) {
 						}
 					case "PPM":
 						globalSettings.PPM = int(val.(float64))
-					case "FlightLoglevel":
+					case "FlightLogLevel":
 						globalSettings.FlightLogLevel = int(val.(float64))
 					case "Baud":
 						if serialOut, ok := globalSettings.SerialOutputs["/dev/serialout0"]; ok { //FIXME: Only one device for now.
