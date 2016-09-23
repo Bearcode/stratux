@@ -478,6 +478,7 @@ func managementInterface() {
 		logPath = "/var/log"
 	}
 	http.Handle("/logs/", http.StripPrefix("/logs/", http.FileServer(http.Dir(logPath))))
+	http.Handle("/logs/stratux/", http.StripPrefix("/logs/stratux/", http.FileServer(http.Dir(logPath))))
 	http.HandleFunc("/view_logs/", viewLogs)
 
 	http.HandleFunc("/status",

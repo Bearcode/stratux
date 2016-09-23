@@ -47,6 +47,7 @@ type StratuxStartup struct {
 
 var dataLogStarted bool
 var dataLogReadyToWrite bool
+var lastSituationLogMs uint64
 
 var stratuxStartupID int64
 var dataLogTimestamps []StratuxTimestamp
@@ -317,7 +318,7 @@ func insertData(i interface{}, tbl string, db *sql.DB, ts_num int64) int64 {
 		}
 */
 //		values = append(values, strconv.FormatInt(dataLogTimestamps[ts_num].id, 10))
-		values = append(values, strconv.FormatInt(stratuxClock.Milliseconds, 10))
+		values = append(values, strconv.FormatInt(int64(stratuxClock.Milliseconds), 10))
 		keys = append(keys, "startup_id")
 		values = append(values, strconv.FormatInt(stratuxStartupID, 10))
 	}
@@ -542,23 +543,23 @@ func isDataLogReady() bool {
 
 func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
-		if globalSettings.flightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
+		if globalSettings.FlightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
 			now := stratuxClock.Milliseconds
 			msd := (now - lastSituationLogMs)
 			
 			// logbook is 30 seconds (30,000 ms)
-			if (globalSettings.flightLoglevel == FLIGHT_LOG_LEVEL_LOGBOOK) && (msd < 30000) {
+			if (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_LOGBOOK) && (msd < 30000) {
 				return;
 			}
 			
 			// debrief is 2 Hz (500 ms)
-			if (globalSettings.flightLoglevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (msd < 500) {
+			if (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (msd < 500) {
 				return;
 			}
 			
 		}
 		dataLogChan <- DataLogRow{tbl: "mySituation", data: mySituation}
-		lastSituationLogMs = now
+		lastSituationLogMs = stratuxClock.Milliseconds
 	}
 }
 
@@ -575,25 +576,25 @@ func logSettings() {
 }
 
 func logTraffic(ti TrafficInfo) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.flightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) {
 		dataLogChan <- DataLogRow{tbl: "traffic", data: ti}
 	}
 }
 
 func logMsg(m msg) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.flightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF)  {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF)  {
 		dataLogChan <- DataLogRow{tbl: "messages", data: m}
 	}
 }
 
 func logESMsg(m esmsg) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.flightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) {
 		dataLogChan <- DataLogRow{tbl: "es_messages", data: m}
 	}
 }
 
 func logDump1090TermMessage(m Dump1090TermMessage) {
-	if globalSettings.DEBUG && globalSettings.ReplayLog && isDataLogReady() && (globalSettings.flightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) {
+	if globalSettings.DEBUG && globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) {
 		dataLogChan <- DataLogRow{tbl: "dump1090_terminal", data: m}
 	}
 }
