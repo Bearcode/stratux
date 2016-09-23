@@ -33,6 +33,7 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 		$scope.PPM = settings.PPM;
 		$scope.WatchList = settings.WatchList;
 		$scope.OwnshipModeS = settings.OwnshipModeS;
+		$scope.FlightLogLevel = settings.FlightLogLevel;
 	}
 
 	function getSettings() {
@@ -90,6 +91,18 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 			settings["PPM"] = parseInt($scope.PPM);
 			newsettings = {
 				"PPM": settings["PPM"]
+			};
+			// console.log(angular.toJson(newsettings));
+			setSettings(angular.toJson(newsettings));
+		}
+	};
+
+	$scope.updatefll = function () {
+		settings["FlightLogLevel"] = 0
+		if (($scope.FlightLogLevel !== undefined) && ($scope.FlightLogLevel !== null) && ($scope.FlightLogLevel !== settings["FlightLogLevel"])) {
+			settings["FlightLogLevel"] = parseInt($scope.FlightLogLevel);
+			newsettings = {
+				"FlightLogLevel": settings["FlightLogLevel"]
 			};
 			// console.log(angular.toJson(newsettings));
 			setSettings(angular.toJson(newsettings));
