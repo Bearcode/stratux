@@ -26,8 +26,8 @@ type monotonic struct {
 func (m *monotonic) Watcher() {
 	for {
 		<-m.ticker.C
-		m.Milliseconds += 10
-		m.Time = m.Time.Add(10 * time.Millisecond)
+		m.Milliseconds += 1
+		m.Time = m.Time.Add(1 * time.Millisecond)
 	}
 }
 
@@ -43,12 +43,8 @@ func (m *monotonic) Unix() int64 {
 	return int64(m.Since(time.Time{}).Seconds())
 }
 
-func (m *monotonic) Milliseconds() int64 {
-	return int64(m.Since(time.Time{}).Milliseconds())
-}
-
 func NewMonotonic() *monotonic {
-	t := &monotonic{Milliseconds: 0, Time: time.Time{}, ticker: time.NewTicker(10 * time.Millisecond)}
+	t := &monotonic{Milliseconds: 0, Time: time.Time{}, ticker: time.NewTicker(1 * time.Millisecond)}
 	go t.Watcher()
 	return t
 }

@@ -543,7 +543,7 @@ func isDataLogReady() bool {
 func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
 		if globalSettings.flightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
-			now := stratuxClock.Milliseconds()
+			now := stratuxClock.Milliseconds
 			msd := (now - lastSituationLogMs)
 			
 			// logbook is 30 seconds (30,000 ms)
