@@ -327,7 +327,7 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 	
 	// this should be configured based on the request parameters
 	var sql string = "SELECT id, start, duration FROM startup ORDER BY id ASC;"
-	
+	theCase := "original"
     data, _ := gosqljson.QueryDbToMap(db, theCase, "SELECT ID,NAME FROM t LIMIT ?,?", 0, 3)
     fmt.Println(data)
 	clientsJSON, _ := json.Marshal(&data)
