@@ -10,6 +10,8 @@
 package main
 
 import (
+	"database/sql"
+	_ "github.com/mattn/go-sqlite3"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -308,6 +310,55 @@ func handleClientsGetRequest(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s\n", clientsJSON)
 }
 
+func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
+	setNoCache(w)
+	setJSONHeaders(w)
+	
+	db, err := sql.Open("sqlite3", dataLogFilef)
+	if err != nil {
+		log.Printf("sql.Open(): %s\n", err.Error())
+	}
+
+	defer func() {
+		db.Close()
+		dataLogStarted = false
+	}()
+
+	_, err = db.Exec("PRAGMA journal_mode=WAL")
+	if err != nil {
+		log.Printf("db.Exec('PRAGMA journal_mode=WAL') err: %s\n", err.Error())
+	}
+	_, err = db.Exec("PRAGMA synchronous=OFF")
+	if err != nil {
+		log.Printf("db.Exec('PRAGMA journal_mode=WAL') err: %s\n", err.Error())
+	}
+	
+	// this should be configured based on the request parameters
+	var sql string = "SELECT id, start, duration FROM startup ORDER BY id ASC;"
+	
+
+	rows, err := db.Query(sql)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer rows.Close()
+/*	
+	for rows.Next() {
+		var id int
+		var start int
+		var duration int
+		
+		err = rows.Scan(&id, &start, &duration)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(id, start, duration)
+	}
+*/
+	clientsJSON, _ := json.Marshal(&rows)
+	fmt.Fprintf(w, "%s\n", clientsJSON)
+}
+
 func delayReboot() {
 	time.Sleep(1 * time.Second)
 	doReboot()
@@ -519,7 +570,8 @@ func managementInterface() {
 	http.HandleFunc("/getClients", handleClientsGetRequest)
 	http.HandleFunc("/updateUpload", handleUpdatePostRequest)
 	http.HandleFunc("/roPartitionRebuild", handleroPartitionRebuild)
-
+	http.HandleFunc("/flightlog/", handleFlightLogRequest)
+	
 	err := http.ListenAndServe(managementAddr, nil)
 
 	if err != nil {

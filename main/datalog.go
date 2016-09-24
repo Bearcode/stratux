@@ -517,6 +517,16 @@ func dataLog() {
 */
 
 func setDataLogTimeWithGPS(sit SituationData) {
+	/* 
+		TODO: we only need to run this function once to set the start time value
+		in the current startup record. Calculate the number of milliseconds since the
+		system started logging data (stratuxClock init value) and now. Convert the 
+		GPS time into milliseconds, then subtract the difference. That gives you the
+		start time (UTC) in milliseconds. (In other words, Unix Timestamp in Milliseconds.)
+		
+		Take that value and stick it in the current "startup" record. 
+	
+	*/
 	if isGPSClockValid() {
 		var ts StratuxTimestamp
 		// Piggyback a GPS time update from this update.
