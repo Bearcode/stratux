@@ -39,6 +39,16 @@ type SettingMessage struct {
 var weatherUpdate *uibroadcaster
 var trafficUpdate *uibroadcaster
 
+// Tables in the database that can be queried
+var tables = map[string]string{
+	"flights": "startup",
+	"status": "status",
+	"uat": "messages",
+	"es": "es_messages",
+	"ownship": "mySituation",
+	"traffic": "traffic"}
+
+
 /*
 	The /weather websocket starts off by sending the current buffer of weather messages, then sends updates as they are received.
 */
@@ -311,9 +321,67 @@ func handleClientsGetRequest(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s\n", clientsJSON)
 }
 
+func getSQL(url string) (string, error) {
+
+	var sql string = ""
+	
+	path := strings.Split(url, "/")
+	
+	// everything starts with "/flightlog"
+	if path[1] != "flightlog" {
+		return "", errors.New("Error - missing required 'flightlog' prefix")
+	}
+	
+	// have to at least specify a table
+	if len(path) < 3 {
+		return "", errors.New("Error - missing parameters")
+	}
+	
+	// table name is the 3rd item in the path
+	var table string = tables[path[2]]
+	if table == "" {
+		return "", errors.New("Error - invalid table name")
+	}
+	
+	// unless this is a request for the list of flights, a flight ID is required
+	if table != "startup" && len(path) < 4 {
+		return "", errors.New("Error - request must include a flight ID parameter")
+	}
+	
+	// Return everything for the selected table and flight (startup)
+	if table == "startup" {
+		sql = fmt.Sprintf("SELECT * FROM startup ORDER BY id ASC\n")
+	} else {
+		startup, _ := strconv.Atoi(path[3])
+		sql = fmt.Sprintf("SELECT * FROM %s WHERE startup_id = %d ORDER BY timestamp_id ASC\n", table, startup)
+	}
+	
+	// Limit value (max number of records to return)
+	if len(path) > 4 {
+		limit, err := strconv.Atoi(path[4])
+		if (err != nil) {
+			return "", errors.New("Error - limit value must be an integer")
+		}
+		sql = sql + "LIMIT " + strconv.Itoa(limit);
+	}
+	
+	// Offset value (from 0)
+	if len(path) > 5 {
+		offset, err := strconv.Atoi(path[5])
+		if (err != nil) {
+			return "", errors.New("Error - offset value must be an integer")
+		}
+		sql = sql + " OFFSET " + strconv.Itoa(offset);
+	}
+	
+	// SELECT * FROM {table} 
+	// WHERE startup_id = {startup} ORDER BY timestamp_id ASC 
+	// LIMIT {count} OFFSET {offset}
+	
+	return sql, nil
+}
+
 func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
-	setNoCache(w)
-	setJSONHeaders(w)
 	
 	db, err := sql.Open("sqlite3", dataLogFilef)
 	if err != nil {
@@ -325,13 +393,21 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 		dataLogStarted = false
 	}()
 	
-	// this should be configured based on the request parameters
-	var sql string = "SELECT id, start, duration FROM startup ORDER BY id ASC;"
-	theCase := "original"
-    data, _ := gosqljson.QueryDbToMap(db, theCase, sql)
-    fmt.Println(data)
-	clientsJSON, _ := json.Marshal(&data)
-	fmt.Fprintf(w, "%s\n", clientsJSON)
+	stmt, err := getSQL(r.URL.String())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+    m, err := gosqljson.QueryDbToMapJSON(db, "any", stmt)
+    if err != nil {
+    	fmt.Println(err)
+    	return
+    }
+
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "%s\n", m)
 }
 
 func delayReboot() {
