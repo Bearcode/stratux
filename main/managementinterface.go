@@ -28,6 +28,7 @@ import (
 	"syscall"
 	"text/template"
 	"time"
+	"errors"
 )
 
 type SettingMessage struct {
