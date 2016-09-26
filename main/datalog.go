@@ -39,10 +39,12 @@ type StratuxTimestamp struct {
 // 'startup' table creates a new entry each time the daemon is started. This keeps track of sequential starts, even if the
 //  timestamp is ambiguous (units with no GPS). This struct is just a placeholder for an empty table (other than primary key).
 type StratuxStartup struct {
-	id   int64
-	Fill string
-	start int64 // starting timestamp in ms (epoch)
-	duration int64 // duration of the flight in seconds
+	id         int64
+	start_loc  string     // starting location (airport or GPS coordinate)
+	start_ts   string 	  // starting timestamp (GPS date/time format)
+	duration   int64	  // duration of the flight in minutes
+	distance   int64      // distance of flight in nm
+	route      string	  // route of flight (list of airport ids / coordinate points)
 }
 
 var dataLogStarted bool
