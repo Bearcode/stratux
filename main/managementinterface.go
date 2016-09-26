@@ -352,7 +352,7 @@ func getSQL(url string) (string, error) {
 	
 	// Return everything for the selected table and flight (startup)
 	if table == "startup" {
-		sql = fmt.Sprintf("SELECT * FROM startup ORDER BY id ASC\n")
+		sql = fmt.Sprintf("SELECT * FROM startup ORDER BY id DESC\n")
 	} else {
 		startup, _ := strconv.Atoi(path[3])
 		sql = fmt.Sprintf("SELECT * FROM %s WHERE startup_id = %d ORDER BY timestamp_id ASC\n", table, startup)
