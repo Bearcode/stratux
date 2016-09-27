@@ -392,7 +392,6 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		db.Close()
-		dataLogStarted = false
 	}()
 	
 	stmt, err := getSQL(r.URL.String())
