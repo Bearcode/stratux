@@ -514,11 +514,13 @@ func dataLog() {
 		makeTable(msg{}, "messages", db)
 		makeTable(esmsg{}, "es_messages", db)
 		makeTable(Dump1090TermMessage{}, "dump1090_terminal", db)
-		makeTable(StratuxStartup{}, "startup", db)
+		//makeTable(StratuxStartup{}, "startup", db)
+		makeTable(FlightLog{}, "startup", db)
 	}
 
 	// The first entry to be created is the "startup" entry.
-	stratuxStartupID = insertData(StratuxStartup{}, "startup", db, 0)
+	//stratuxStartupID = insertData(StratuxStartup{}, "startup", db, 0)
+	stratuxStartupID = insertData(FlightLog{}, "startup", db, 0)
 
 	dataLogReadyToWrite = true
 	//log.Printf("Entering dataLog read loop\n") //REMOVE -- DEBUG
