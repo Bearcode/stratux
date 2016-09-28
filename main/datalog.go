@@ -70,6 +70,7 @@ type airport struct {
 	lat float64
 	lng float64
 	alt float64
+	dst float64
 }
 
 /*
@@ -405,7 +406,7 @@ func dataLogWriter(db *sql.DB) {
 				log.Printf("db.Begin() error: %s\n", err.Error())
 				break // from select {}
 			}
-			res, err = db.Exec(sql)
+			res, err := db.Exec(sql)
 			// Close the transaction.
 			tx.Commit()
 		case <-writeTicker.C:
@@ -678,7 +679,8 @@ func updateFlightLog(db *sql.DB) {
 		return
 	}
 	
-	ret, err := db.Exec(stmt, f.start_airport_id, f.start_airport_name, f.start_timestamp, f.start_localtime, f.start_tz, f.start_lat, f.start_lng, f.end_airport_name, f.end_timestamp, f.end_localtime, f.end_tz, f.end_lat, f.end_lng, duration, distance, groundspeed, route, stratuxStartupID)
+	f := flightlog
+	ret, err := db.Exec(stmt, f.start_airport_id, f.start_airport_name, f.start_timestamp, f.start_localtime, f.start_tz, f.start_lat, f.start_lng, f.end_airport_name, f.end_timestamp, f.end_localtime, f.end_tz, f.end_lat, f.end_lng, f.duration, f.distance, f.groundspeed, f.route, stratuxStartupID)
 	if err != nil {
 		fmt.Printf("Error executing statement: %v", err)
 		return
