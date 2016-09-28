@@ -59,8 +59,8 @@ var stratuxStartupID int64
 var dataLogTimestamps []StratuxTimestamp
 var dataLogCurTimestamp int64 // Current timestamp bucket. This is an index on dataLogTimestamps which is not necessarily the db id.
 
-var lastTimestamp time.Time
-var lastPoint geo.Point
+var lastTimestamp *time.Time
+var lastPoint *geo.Point
 var weAreFlying bool
 
 type airport struct {
@@ -384,7 +384,7 @@ type DataLogRow struct {
 var dataLogChan chan DataLogRow
 var shutdownDataLog chan bool
 var shutdownDataLogWriter chan bool
-var dataUpdateChan chan string
+var dataUpdateChan chan bool
 var dataLogWriteChan chan DataLogRow
 
 func dataLogWriter(db *sql.DB) {
@@ -399,14 +399,14 @@ func dataLogWriter(db *sql.DB) {
 		case r := <-dataLogWriteChan:
 			// Accept timestamped row.
 			rowsQueuedForWrite = append(rowsQueuedForWrite, r)
-		case sql := <-dataUpdateChan:
+		case <-dataUpdateChan:
 			// Start transaction.
 			tx, err := db.Begin()
 			if err != nil {
 				log.Printf("db.Begin() error: %s\n", err.Error())
 				break // from select {}
 			}
-			res, err := db.Exec(sql)
+			updateFlightLog(db)
 			// Close the transaction.
 			tx.Commit()
 		case <-writeTicker.C:
@@ -680,7 +680,7 @@ func updateFlightLog(db *sql.DB) {
 	}
 	
 	f := flightlog
-	ret, err := db.Exec(stmt, f.start_airport_id, f.start_airport_name, f.start_timestamp, f.start_localtime, f.start_tz, f.start_lat, f.start_lng, f.end_airport_name, f.end_timestamp, f.end_localtime, f.end_tz, f.end_lat, f.end_lng, f.duration, f.distance, f.groundspeed, f.route, stratuxStartupID)
+	ret, err := stmt.Exec(f.start_airport_id, f.start_airport_name, f.start_timestamp, f.start_localtime, f.start_tz, f.start_lat, f.start_lng, f.end_airport_name, f.end_timestamp, f.end_localtime, f.end_tz, f.end_lat, f.end_lng, f.duration, f.distance, f.groundspeed, f.route, stratuxStartupID)
 	if err != nil {
 		fmt.Printf("Error executing statement: %v", err)
 		return
@@ -716,26 +716,26 @@ func logSituation() {
 		*/
 		if (flightlog.start_timestamp == 0) && isGPSValid() {
 			// gps coordinates at startup
-			flightlog.start_lat = mySituation.Lat
-			flightlog.start_lng = mySituation.Lng
+			flightlog.start_lat = float64(mySituation.Lat)
+			flightlog.start_lng = float64(mySituation.Lng)
 			
 			// time, timezone, localtime
 			flightlog.start_timestamp = mySituation.GPSTime.Unix()
-			flightlog.start_tz = latlong.LookupZoneName(mySituation.Lat, mySituation.Lng)
+			flightlog.start_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
 			loc, err := time.LoadLocation(flightlog.start_tz)
 			if (err == nil) {
 				flightlog.start_localtime = mySituation.GPSTime.In(loc).String()
 			}
 			
 			// airport code and name
-			apt, err := FindAirport(mySituation.Lat, mySituation.Lng)
+			apt, err := findAirport(mySituation.Lat, mySituation.Lng)
 			if (err == nil) {
 				flightlog.start_airport_id = apt.faaId
 				flightlog.start_airport_name = apt.name
 			}
 			
 			// update the database entry
-			updateFlightLog()
+			dataUpdateChan <- true
 		}
 		
 		/*
@@ -743,7 +743,7 @@ func logSituation() {
 			- use it to update totals (time, distance)
 			- don't bother writing to the db - just cache the values for update
 		*/
-		p := geo.NewPoint(mySituation.Lat, mySituation.Lng)
+		p := geo.NewPoint(float64(mySituation.Lat), float64(mySituation.Lng))
 		if (lastPoint != nil) {
 			segment := p.getGreatCircleDistance(lastPoint);
 			flightlog.distance = flightlog.distance + segment
@@ -783,7 +783,7 @@ func logSituation() {
 			}
 			
 			// update the database entry
-			updateFlightLog()
+			dataUpdateChan <- true
 
 			// flag us as not flying
 			weAreFlying = false
