@@ -21,10 +21,13 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"github.com/kellydunn/golang-geo"
+	"github.com/bradfitz/latlong"
 )
 
 const (
 	LOG_TIMESTAMP_RESOLUTION = 250 * time.Millisecond
+	MIN_FLIGHT_SPEED = 35
 )
 
 type StratuxTimestamp struct {
@@ -50,10 +53,24 @@ type StratuxStartup struct {
 var dataLogStarted bool
 var dataLogReadyToWrite bool
 var lastSituationLogMs uint64
+var minimumFlightSpeed int64 = MIN_FLIGHT_SPEED
 
 var stratuxStartupID int64
 var dataLogTimestamps []StratuxTimestamp
 var dataLogCurTimestamp int64 // Current timestamp bucket. This is an index on dataLogTimestamps which is not necessarily the db id.
+
+var lastTimestamp time.Time
+var lastPoint geo.Point
+var weAreFlying bool
+
+type airport struct {
+	faaId string
+	icaoId string
+	name string
+	lat float64
+	lng float64
+	alt float64
+}
 
 /*
 	checkTimestamp().
@@ -366,7 +383,7 @@ type DataLogRow struct {
 var dataLogChan chan DataLogRow
 var shutdownDataLog chan bool
 var shutdownDataLogWriter chan bool
-
+var dataUpdateChan chan string
 var dataLogWriteChan chan DataLogRow
 
 func dataLogWriter(db *sql.DB) {
@@ -381,6 +398,16 @@ func dataLogWriter(db *sql.DB) {
 		case r := <-dataLogWriteChan:
 			// Accept timestamped row.
 			rowsQueuedForWrite = append(rowsQueuedForWrite, r)
+		case sql := <-dataUpdateChan:
+			// Start transaction.
+			tx, err := db.Begin()
+			if err != nil {
+				log.Printf("db.Begin() error: %s\n", err.Error())
+				break // from select {}
+			}
+			res, err = db.Exec(sql)
+			// Close the transaction.
+			tx.Commit()
 		case <-writeTicker.C:
 			//			for i := 0; i < 1000; i++ {
 			//				logSituation()
@@ -553,8 +580,114 @@ func isDataLogReady() bool {
 	return dataLogReadyToWrite
 }
 
+func findAirport(lat float64, lng float64) (airport, error) {
+	
+	// return value
+	var ret airport
+
+	aptdb, err := sql.Open("sqlite3", "/root/log/airports.sqlite")
+	if err != nil {
+		return ret, err
+	}
+	
+	defer aptdb.Close()
+	
+	minLat := lat - 0.1
+	minLng := lng - 0.1
+	maxLat := lat + 0.1
+	maxLng := lng + 0.1
+	
+	p := geo.NewPoint(lat, lng)
+	
+	rows, err := aptdb.Query("SELECT faaid, icaoid, name, lat, lng, alt FROM airport WHERE lat > ? AND lat < ? AND lng > ? AND lng < ? ORDER BY id ASC;", minLat, maxLat, minLng, maxLng)
+	if err != nil {
+		return ret, err
+	}
+	
+	for rows.Next() {
+		var r airport
+		err = rows.Scan(&r.faaId, &r.icaoId, &r.name, &r.lat, &r.lng, &r.alt)
+		ap := geo.NewPoint(r.lat, r.lng)
+		r.dst = ap.GreatCircleDistance(p)
+		
+		if (ret.faaId == "") {
+			ret = r
+		} else if (r.dst < ret.dst) {
+			ret = r
+		}
+	}
+	
+	return ret, nil
+}
+
+// replaces 'startup'
+type FlightLog struct {
+	id int64
+	start_airport_id string
+	start_airport_name string
+	start_timestamp int64
+	start_localtime string
+	start_tz string
+	start_lat float64
+	start_lng float64
+	
+	end_airport_id string
+	end_airport_name string
+	end_timestamp int64
+	end_localtime string
+	end_tz string
+	end_lat float64
+	end_lng float64
+	
+	duration int64
+	distance float64
+	groundspeed int64
+	
+	route string
+}
+
+var flightlog FlightLog
+
+func updateFlightLog(db *sql.DB) {
+	
+	var sql string
+	sql = "UPDATE `startup` SET\n"
+	sql = sql + "start_airport_id = ?,\n"
+	sql = sql + "start_airport_name = ?,\n"
+	sql = sql + "start_timestamp = ?,\n"
+	sql = sql + "start_localtime = ?,\n"
+	sql = sql + "start_tz = ?,\n"
+	sql = sql + "start_lat = ?,\n"
+	sql = sql + "start_lng = ?,\n"
+	sql = sql + "end_airport_id = ?,\n"
+	sql = sql + "end_airport_name = ?,\n"
+	sql = sql + "end_timestamp = ?,\n"
+	sql = sql + "end_localtime = ?,\n"
+	sql = sql + "end_tz = ?,\n"
+	sql = sql + "end_lat = ?,\n"
+	sql = sql + "end_lng = ?,\n"	
+	sql = sql + "duration = ?,\n"
+	sql = sql + "distance = ?,\n"
+	sql = sql + "groundspeed = ?,\n"
+	sql = sql + "route = ?\n"
+	sql = sql + "WHERE id = ?;"
+	
+	stmt, err := db.Prepare(sql)
+	if err != nil {
+		fmt.Printf("Error creating statement: %v", err)
+		return
+	}
+	
+	ret, err := db.Exec(stmt, f.start_airport_id, f.start_airport_name, f.start_timestamp, f.start_localtime, f.start_tz, f.start_lat, f.start_lng, f.end_airport_name, f.end_timestamp, f.end_localtime, f.end_tz, f.end_lat, f.end_lng, duration, distance, groundspeed, route, stratuxStartupID)
+	if err != nil {
+		fmt.Printf("Error executing statement: %v", err)
+		return
+	}
+}
+
 func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
+		// if log level is anything less than demo, we want to limit the update frequency
 		if globalSettings.FlightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
 			now := stratuxClock.Milliseconds
 			msd := (now - lastSituationLogMs)
@@ -571,6 +704,97 @@ func logSituation() {
 			
 		}
 		dataLogChan <- DataLogRow{tbl: "mySituation", data: mySituation}
+		
+		// TODO: add hooks here to update the flightlog information
+		
+		/*
+			hook first mySituation record with a valid GPS timestamp and lat/lon
+			- use it to determine time, timezone, location, date
+			- update flight (startup) record
+		*/
+		if (flightlog.start_timestamp == 0) && isGPSValid() {
+			// gps coordinates at startup
+			flightlog.start_lat = mySituation.Lat
+			flightlog.start_lng = mySituation.Lng
+			
+			// time, timezone, localtime
+			flightlog.start_timestamp = mySituation.GPSTime.Unix()
+			flightlog.start_tz = latlong.LookupZoneName(mySituation.Lat, mySituation.Lng)
+			loc, err := time.LoadLocation(flightlog.start_tz)
+			if (err == nil) {
+				flightlog.start_localtime = mySituation.GPSTime.In(loc).String()
+			}
+			
+			// airport code and name
+			apt, err := FindAirport(mySituation.Lat, mySituation.Lng)
+			if (err == nil) {
+				flightlog.start_airport_id = apt.faaId
+				flightlog.start_airport_name = apt.name
+			}
+			
+			// update the database entry
+			updateFlightLog()
+		}
+		
+		/*
+			hook each additional record
+			- use it to update totals (time, distance)
+			- don't bother writing to the db - just cache the values for update
+		*/
+		p := geo.NewPoint(mySituation.Lat, mySituation.Lng)
+		if (lastPoint != nil) {
+			segment := p.getGreatCircleDistance(lastPoint);
+			flightlog.distance = flightlog.distance + segment
+		}
+		lastPoint = p;
+		
+		t := time.Now()
+		if (lastTimestamp != nil) {
+			increment := t.sub(lastTimestamp)
+			flightlog.duration = flightlog.duration + increment
+		}
+		lastTimestamp = t
+			
+		/*
+			check each record thereafter to see if it has a ground speed of Zero
+			- use it to determine time, timezone, location, route of a stop
+			- update flight (startup) record
+		*/
+		if (weAreFlying) && (mySituation.GroundSpeed == 0) {
+			// gps coordinates at startup
+			flightlog.end_lat = mySituation.Lat
+			flightlog.end_lng = mySituation.Lng
+			
+			// time, timezone, localtime
+			flightlog.end_timestamp = mySituation.GPSTime.Unix()
+			flightlog.end_tz = latlong.LookupZoneName(mySituation.Lat, mySituation.Lng)
+			loc, err := time.LoadLocation(flightlog.end_tz)
+			if (err == nil) {
+				flightlog.end_localtime = mySituation.GPSTime.In(loc).String()
+			}
+			
+			// airport code and name
+			apt, err := FindAirport(mySituation.Lat, mySituation.Lng)
+			if (err == nil) {
+				flightlog.end_airport_id = apt.faaId
+				flightlog.end_airport_name = apt.name
+			}
+			
+			// update the database entry
+			updateFlightLog()
+
+			// flag us as not flying
+			weAreFlying = false
+		}
+		
+		/*
+			determine if we are flying and set the weAreFlying flag in response
+		*/
+		if (weAreFlying == false) && (mySituation.GroundSpeed >= minimumFlightSpeed) {
+			// set the flag
+			weAreFlying = true
+		}
+		
 		lastSituationLogMs = stratuxClock.Milliseconds
 	}
 }
