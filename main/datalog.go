@@ -728,7 +728,7 @@ func logSituation() {
 			}
 			
 			// airport code and name
-			apt, err := findAirport(mySituation.Lat, mySituation.Lng)
+			apt, err := findAirport(float64(mySituation.Lat), float64(mySituation.Lng))
 			if (err == nil) {
 				flightlog.start_airport_id = apt.faaId
 				flightlog.start_airport_name = apt.name
@@ -745,17 +745,17 @@ func logSituation() {
 		*/
 		p := geo.NewPoint(float64(mySituation.Lat), float64(mySituation.Lng))
 		if (lastPoint != nil) {
-			segment := p.getGreatCircleDistance(lastPoint);
+			segment := p.GreatCircleDistance(lastPoint);
 			flightlog.distance = flightlog.distance + segment
 		}
 		lastPoint = p;
 		
 		t := time.Now()
 		if (lastTimestamp != nil) {
-			increment := t.sub(lastTimestamp)
+			increment := t.Sub(lastTimestamp)
 			flightlog.duration = flightlog.duration + increment
 		}
-		lastTimestamp = t
+		lastTimestamp = &t
 			
 		/*
 			check each record thereafter to see if it has a ground speed of Zero
@@ -764,19 +764,19 @@ func logSituation() {
 		*/
 		if (weAreFlying) && (mySituation.GroundSpeed == 0) {
 			// gps coordinates at startup
-			flightlog.end_lat = mySituation.Lat
-			flightlog.end_lng = mySituation.Lng
+			flightlog.end_lat = float64(mySituation.Lat)
+			flightlog.end_lng = float64(mySituation.Lng)
 			
 			// time, timezone, localtime
 			flightlog.end_timestamp = mySituation.GPSTime.Unix()
-			flightlog.end_tz = latlong.LookupZoneName(mySituation.Lat, mySituation.Lng)
+			flightlog.end_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
 			loc, err := time.LoadLocation(flightlog.end_tz)
 			if (err == nil) {
 				flightlog.end_localtime = mySituation.GPSTime.In(loc).String()
 			}
 			
 			// airport code and name
-			apt, err := FindAirport(mySituation.Lat, mySituation.Lng)
+			apt, err := findAirport(mySituation.Lat, mySituation.Lng)
 			if (err == nil) {
 				flightlog.end_airport_id = apt.faaId
 				flightlog.end_airport_name = apt.name
