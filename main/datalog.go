@@ -695,25 +695,6 @@ func updateFlightLog(db *sql.DB) {
 
 func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
-		// if log level is anything less than demo, we want to limit the update frequency
-		if globalSettings.FlightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
-			now := stratuxClock.Milliseconds
-			msd := (now - lastSituationLogMs)
-			
-			// logbook is 30 seconds (30,000 ms)
-			if (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_LOGBOOK) && (msd < 30000) {
-				return;
-			}
-			
-			// debrief is 2 Hz (500 ms)
-			if (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (msd < 500) {
-				return;
-			}
-			
-		}
-		dataLogChan <- DataLogRow{tbl: "mySituation", data: mySituation}
-		
-		// TODO: add hooks here to update the flightlog information
 		
 		/*
 			hook first mySituation record with a valid GPS timestamp and lat/lon
@@ -803,6 +784,23 @@ func logSituation() {
 			weAreFlying = true
 		}
 		
+		// if log level is anything less than demo, we want to limit the update frequency
+		if globalSettings.FlightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
+			now := stratuxClock.Milliseconds
+			msd := (now - lastSituationLogMs)
+			
+			// logbook is 30 seconds (30,000 ms)
+			if (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_LOGBOOK) && (msd < 30000) {
+				return;
+			}
+			
+			// debrief is 2 Hz (500 ms)
+			if (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (msd < 500) {
+				return;
+			}
+			
+		}
+		dataLogChan <- DataLogRow{tbl: "mySituation", data: mySituation}
 		lastSituationLogMs = stratuxClock.Milliseconds
 	}
 }
