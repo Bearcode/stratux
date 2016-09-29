@@ -41,14 +41,17 @@ type SettingMessage struct {
 var weatherUpdate *uibroadcaster
 var trafficUpdate *uibroadcaster
 
-// Tables in the database that can be queried
+/*
+	Tables in the SQLite database that can be queried as part of the flight logging API
+*/
 var tables = map[string]string{
 	"flights": "startup",
 	"status": "status",
 	"uat": "messages",
 	"es": "es_messages",
 	"ownship": "mySituation",
-	"traffic": "traffic"}
+	"traffic": "traffic"
+}
 
 
 /*
@@ -323,9 +326,19 @@ func handleClientsGetRequest(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s\n", clientsJSON)
 }
 
-func getSQL(url string) (string, error) {
+type LogQuery struct {
+	sql string
+	countSQL string
+	limit int64
+	offset int64
+}
 
-	var sql string = ""
+/*
+	getSQL(): generates an SQL statement for various flight log queries
+*/
+func getSQL(url string) (LogQuery, error) {
+
+	var ret LogQuery
 	
 	path := strings.Split(url, "/")
 	
@@ -352,10 +365,12 @@ func getSQL(url string) (string, error) {
 	
 	// Return everything for the selected table and flight (startup)
 	if table == "startup" {
-		sql = fmt.Sprintf("SELECT * FROM startup ORDER BY id DESC\n")
+		ret.sql = "SELECT * FROM startup ORDER BY id DESC\n"
+		ret.countSQL = "SELECT count(*) FROM startup;"
 	} else {
 		startup, _ := strconv.Atoi(path[3])
-		sql = fmt.Sprintf("SELECT * FROM %s WHERE startup_id = %d ORDER BY timestamp_id ASC\n", table, startup)
+		ret.sql = fmt.Sprintf("SELECT * FROM %s WHERE startup_id = %d ORDER BY timestamp_id ASC\n", table, startup)
+		ret.countSQL = fmt.Sprintf("SELECT COUNT(*) FROM `%s` WHERE startup_id = %d", table, startup)
 	}
 	
 	// Limit value (max number of records to return)
@@ -364,7 +379,11 @@ func getSQL(url string) (string, error) {
 		if (err != nil) {
 			return "", errors.New("Error - limit value must be an integer")
 		}
-		sql = sql + "LIMIT " + strconv.Itoa(limit);
+		ret.sql = ret.sql + "LIMIT " + strconv.Itoa(limit);
+		ret.limit = limit
+	} else {
+		ret.sql = ret.sql + "LIMIT 1000"
+		ret.limit = 1000
 	}
 	
 	// Offset value (from 0)
@@ -373,14 +392,18 @@ func getSQL(url string) (string, error) {
 		if (err != nil) {
 			return "", errors.New("Error - offset value must be an integer")
 		}
-		sql = sql + " OFFSET " + strconv.Itoa(offset);
+		ret.sql = ret.sql + " OFFSET " + strconv.Itoa(offset);
+		ret.offset = offset
+	} else {
+		ret.sql = ret.sql + " OFFSET 0"
+		ret.offset = 0
 	}
 	
 	// SELECT * FROM {table} 
 	// WHERE startup_id = {startup} ORDER BY timestamp_id ASC 
 	// LIMIT {count} OFFSET {offset}
 	
-	return sql, nil
+	return ret, nil
 }
 
 func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
@@ -394,21 +417,33 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 		db.Close()
 	}()
 	
-	stmt, err := getSQL(r.URL.String())
+	query, err := getSQL(r.URL.String())
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
-
-    m, err := gosqljson.QueryDbToMapJSON(db, "any", stmt)
+	
+	var count int
+	rows, err := db.Query(query.countSQL)
+	for rows.Next() {
+		err := rows.Scan(&count)
+		if err != nil {
+			// TODO: proper 500 error responses?
+			fmt.Println(err)
+			return
+		}
+	}
+	
+    m, err := gosqljson.QueryDbToMapJSON(db, "any", query.sql)
     if err != nil {
     	fmt.Println(err)
     	return
     }
 
+	ret := fmt.Sprintf("{\"count\": %d, \"limit\": %d, \"offset\": %d, \"data\": %s}", count, query.limit, query.offset, m)
 	setNoCache(w)
 	setJSONHeaders(w)
-	fmt.Fprintf(w, "%s\n", m)
+	fmt.Fprintf(w, "%s\n", ret)
 }
 
 func delayReboot() {

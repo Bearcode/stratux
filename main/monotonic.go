@@ -6,6 +6,9 @@
 
 	Modifications (c) 2016 AvSquirrel (https://github.com/AvSquirrel)
 	monotonic.go: Create monotonic clock using time.Timer - necessary because of real time clock changes on RPi.
+	
+	Modifications (c) 2016 ssokol (https://github.com/ssokol)
+	monotonic.go: Changed to 1ms resolution on timer for more accurate log records.
 */
 
 package main

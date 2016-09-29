@@ -28,6 +28,7 @@ import (
 const (
 	LOG_TIMESTAMP_RESOLUTION = 250 * time.Millisecond
 	MIN_FLIGHT_SPEED = 35
+	MIN_TAXI_SPEED = 10
 )
 
 type StratuxTimestamp struct {
@@ -53,16 +54,25 @@ type StratuxStartup struct {
 var dataLogStarted bool
 var dataLogReadyToWrite bool
 var lastSituationLogMs uint64
+
 var minimumFlightSpeed uint16 = MIN_FLIGHT_SPEED
+var minimumTaxiSpeed uint16 = MIN_TAXI_SPEED
 
 var stratuxStartupID int64
 var dataLogTimestamps []StratuxTimestamp
 var dataLogCurTimestamp int64 // Current timestamp bucket. This is an index on dataLogTimestamps which is not necessarily the db id.
 
+/*
+	values / flags used by flight logging code (see: logSituation() below)
+*/
 var lastTimestamp *time.Time
 var lastPoint *geo.Point
 var weAreFlying bool
+var weAreTaxiing bool
 
+/*
+	airport structure - used by the airport lookup utility
+*/
 type airport struct {
 	faaId string
 	icaoId string
@@ -329,6 +339,21 @@ func insertData(i interface{}, tbl string, db *sql.DB, ts_num int64) int64 {
 	if tbl != "timestamp" && tbl != "startup" {
 		keys = append(keys, "timestamp_id")
 /*
+	NOTE: this has been disabled and will be removed. The logging system has been revised
+	to simply record the startup_id value and a timestamp_id which is the StratuxClock 
+	Millisecond value. (TODO: change that to 'timestamp' instead of 'timestamp_id'). The
+	value of timestamp_id is relative to the startup time for the associated startup.
+	
+	Example: Flight is part of startup 92. The startup record's start_timestamp (Unix 
+	timestamp) equates to "2016-09-28 11:22:14.9 +0000 UTC". Each timestamp_id value is
+	the number of nanoseconds since the startup (taken from stratuxClock).
+	
+	To convert a specific timestamp to a time literal, simply add it to the start_timestamp
+	value and then convert the Unix timestamp (milliseconds) to UTC or a local date/time.
+	
+	This change simplifies the process of gathering data associated with a given startup
+	and also significantly reduces the number of writes to the database.
+	
 		if dataLogTimestamps[ts_num].id == 0 {
 			//FIXME: This is somewhat convoluted. When insertData() is called for a ts_num that corresponds to a timestamp with no database id,
 			// then it inserts that timestamp via the same interface and the id is updated in the structure via the below lines
@@ -337,7 +362,7 @@ func insertData(i interface{}, tbl string, db *sql.DB, ts_num int64) int64 {
 			insertData(dataLogTimestamps[ts_num], "timestamp", db, ts_num) // Updates dataLogTimestamps[ts_num].id.
 		}
 */
-//		values = append(values, strconv.FormatInt(dataLogTimestamps[ts_num].id, 10))
+		// revised: simply uses ms value from stratuxClock now - see above note.
 		values = append(values, strconv.FormatInt(int64(stratuxClock.Milliseconds), 10))
 		keys = append(keys, "startup_id")
 		values = append(values, strconv.FormatInt(stratuxStartupID, 10))
@@ -519,7 +544,6 @@ func dataLog() {
 	}
 
 	// The first entry to be created is the "startup" entry.
-	//stratuxStartupID = insertData(StratuxStartup{}, "startup", db, 0)
 	stratuxStartupID = insertData(FlightLog{}, "startup", db, 0)
 
 	dataLogReadyToWrite = true
@@ -583,6 +607,18 @@ func isDataLogReady() bool {
 	return dataLogReadyToWrite
 }
 
+/*
+	findAirport(): a simple, quick process for locating the nearest airport to a given
+	set of coordinates. In this case the function is limited to searching within 0.1
+	degrees of the input coordinates.
+	
+	Note: expects to find the "airports.sqlite" file in /root/log
+	
+	The database is compiled from the FAAs NACAR 56-day subscription database and
+	includes all airports including private and heliports.
+	
+	TODO: Find a source for ALL airports
+*/
 func findAirport(lat float64, lng float64) (airport, error) {
 	
 	// return value
@@ -623,7 +659,11 @@ func findAirport(lat float64, lng float64) (airport, error) {
 	return ret, nil
 }
 
-// replaces 'startup'
+/*
+	FlightLog structure - replaces 'startup' structure as the basis for the startup
+	table in the SQLite database. A single FlightLog variable is used throughout a
+	session (startup) to track flight log information.
+*/
 type FlightLog struct {
 	id int64
 	start_airport_id string
@@ -651,6 +691,14 @@ type FlightLog struct {
 
 var flightlog FlightLog
 
+/*
+	updateFlightLog(): updates the SQLite record for the current startup to indicate
+	the appropriate starting and ending values. This is called by dataLogWriter() on
+	its thread (it is a go routine) when the dataUpdateChan is flagged.
+	
+	TODO: replace this with a reflective / introspective automatic update routine ala
+	the insert routine used for bulk updates.
+*/
 func updateFlightLog(db *sql.DB) {
 	
 	var sql string
@@ -693,98 +741,157 @@ func updateFlightLog(db *sql.DB) {
 	}
 }
 
+/*
+	startFlightLog() - called once per startup when the GPS has a valid timestamp and
+	position to tag the beginning of the 'session'. Updates the startup record with
+	the initial place / time values.
+*/
+func startFlightLog() {
+
+	// gps coordinates at startup
+	flightlog.start_lat = float64(mySituation.Lat)
+	flightlog.start_lng = float64(mySituation.Lng)
+	
+	// time, timezone, localtime
+	flightlog.start_timestamp = mySituation.GPSTime.Unix()
+	flightlog.start_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
+	loc, err := time.LoadLocation(flightlog.start_tz)
+	if (err == nil) {
+		flightlog.start_localtime = mySituation.GPSTime.In(loc).String()
+	}
+	
+	// airport code and name
+	apt, err := findAirport(float64(mySituation.Lat), float64(mySituation.Lng))
+	if (err == nil) {
+		flightlog.start_airport_id = apt.faaId
+		flightlog.start_airport_name = apt.name
+	}
+	
+	// update the database entry
+	dataUpdateChan <- true
+}
+
+/*
+	stopFlightLog() - called every time the system shifts from "flying" state to "taxiing"
+	state (or directly to stopped, though that should not happen). Updates the end values
+	for the startup record. Appends the stop point airport to the 'route' list, so if
+	the aircraft makes multiple stops without powering off the system this will indicate
+	all of them.
+*/
+func stopFlightLog() {
+
+	// gps coordinates at startup
+	flightlog.end_lat = float64(mySituation.Lat)
+	flightlog.end_lng = float64(mySituation.Lng)
+	
+	// time, timezone, localtime
+	flightlog.end_timestamp = mySituation.GPSTime.Unix()
+	flightlog.end_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
+	loc, err := time.LoadLocation(flightlog.end_tz)
+	if (err == nil) {
+		flightlog.end_localtime = mySituation.GPSTime.In(loc).String()
+	}
+	
+	// airport code and name
+	apt, err := findAirport(float64(mySituation.Lat), float64(mySituation.Lng))
+	if (err == nil) {
+		flightlog.end_airport_id = apt.faaId
+		flightlog.end_airport_name = apt.name
+		flightlog.route = flightlog.route + " => " + apt.faaId
+	}
+	
+	// update the database entry
+	dataUpdateChan <- true
+}
+
+/*
+	logSituation() - pushes the current 'mySituation' record into the logging channel
+	for writing to the SQLite database. Also provides triggers for startFlightLog(),
+	stopFlightLog() and updates the running distance and time tallies for the flight.
+*/
 func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
 		
-		/*
-			hook first mySituation record with a valid GPS timestamp and lat/lon
-			- use it to determine time, timezone, location, date
-			- update flight (startup) record
-		*/
-		if (flightlog.start_timestamp == 0) && isGPSValid() {
-			// gps coordinates at startup
-			flightlog.start_lat = float64(mySituation.Lat)
-			flightlog.start_lng = float64(mySituation.Lng)
-			
-			// time, timezone, localtime
-			flightlog.start_timestamp = mySituation.GPSTime.Unix()
-			flightlog.start_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
-			loc, err := time.LoadLocation(flightlog.start_tz)
-			if (err == nil) {
-				flightlog.start_localtime = mySituation.GPSTime.In(loc).String()
+		// make sure we have valid GPS Clock time
+		if (lastTimeStamp == nil) {
+			if (isGPSValid() && isGPSClockValid()) {
+				startFlightLog()
+			} else {
+				// not initialized / can't initialize yet - no clock
+				return
 			}
-			
-			// airport code and name
-			apt, err := findAirport(float64(mySituation.Lat), float64(mySituation.Lng))
-			if (err == nil) {
-				flightlog.start_airport_id = apt.faaId
-				flightlog.start_airport_name = apt.name
-			}
-			
-			// update the database entry
-			dataUpdateChan <- true
 		}
 		
-		/*
-			hook each additional record
-			- use it to update totals (time, distance)
-			- don't bother writing to the db - just cache the values for update
-		*/
+		// update the distance traveled in nautical miles
 		p := geo.NewPoint(float64(mySituation.Lat), float64(mySituation.Lng))
 		if (lastPoint != nil) {
 			segment := p.GreatCircleDistance(lastPoint);
-			flightlog.distance = flightlog.distance + segment
+			flightlog.distance = flightlog.distance + (segment * nmPerKm)
 		}
 		lastPoint = p;
 		
-		t := time.Now()
+		// update the amount of time since startup in milliseconds
+		t := stratuxClock.Now()
 		if (lastTimestamp != nil) {
 			increment := t.Sub(*lastTimestamp)
-			flightlog.duration = flightlog.duration + increment.Nanoseconds()
+			flightlog.duration = flightlog.duration + (increment.Nanoseconds() / 1000000)
 		}
 		lastTimestamp = &t
-			
-		/*
-			check each record thereafter to see if it has a ground speed of Zero
-			- use it to determine time, timezone, location, route of a stop
-			- update flight (startup) record
-		*/
-		if (weAreFlying) && (mySituation.GroundSpeed == 0) {
-			// gps coordinates at startup
-			flightlog.end_lat = float64(mySituation.Lat)
-			flightlog.end_lng = float64(mySituation.Lng)
-			
-			// time, timezone, localtime
-			flightlog.end_timestamp = mySituation.GPSTime.Unix()
-			flightlog.end_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
-			loc, err := time.LoadLocation(flightlog.end_tz)
-			if (err == nil) {
-				flightlog.end_localtime = mySituation.GPSTime.In(loc).String()
-			}
-			
-			// airport code and name
-			apt, err := findAirport(float64(mySituation.Lat), float64(mySituation.Lng))
-			if (err == nil) {
-				flightlog.end_airport_id = apt.faaId
-				flightlog.end_airport_name = apt.name
-			}
-			
-			// update the database entry
-			dataUpdateChan <- true
-
-			// flag us as not flying
-			weAreFlying = false
-		}
 		
 		/*
-			determine if we are flying and set the weAreFlying flag in response
+			Flying status state map:
+			
+			Standard Transitions
+			stop => taxi {normal startup}
+			taxi => stop {reposition / back-taxi / run-up}
+			taxi => flight {normal takeoff}
+			flight => taxi => flight {touch/go landing}
+			flight => taxi => stop {full-stop landing}
+			
+			Abnormal Transitions
+			flight => stop {um... not so good}
+			stop => flight {mid-air activation}
+			
+			TODO: add altitude delta check - ignore car trips
+			
 		*/
-		if (weAreFlying == false) && (mySituation.GroundSpeed >= minimumFlightSpeed) {
-			// set the flag
+		// from dead stop to taxi
+		if (weAreFlying == false) && (weAreTaxiing == false) && (mySituation.GroundSpeed < minimumFlightSpeed) && (mySituation.GroundSpeed >= minimumTaxiSpeed) {
+			weAreTaxiing = true
+		} else
+		
+		// from dead stop to flying - mid-air start / restart
+		if (weAreFlying == false) && (weAreTaxiing == false) && (mySituation.GroundSpeed >= minimumFlightSpeed) {
 			weAreFlying = true
+			//TODO: how do we handle these?
+		} else
+		
+		// from taxi to flight
+		if (weAreTaxiing) && (mySituation.GroundSpeed >= minimumFlightSpeed) {
+			weAreTaxiing = false
+			weAreFlying = true
+		} else
+		
+		// from flight to taxi
+		if (weAreFlying == true) && (mySituation.GroundSpeed < minimumFlightSpeed) && (mySituation.GroundSpeed >= minimumTaxiSpeed) {
+			weAreFlying = false
+			weAreTaxiing = true
+			stopFlightLog()
+		} else
+		
+		// from flight to stop - data glitch? crash?
+		if (weAreFlying == true) && (mySituation.GroundSpeed < minimumFlightSpeed) && (mySituation.GroundSpeed < minimumTaxiSpeed) {
+			weAreFlying = false
+			weAreTaxiing = false
+			stopFlightLog()
+		} else
+		
+		// from taxi to stopped
+		if (weAreTaxiing) && (mySituation.GroundSpeed < minimumTaxiSpeed) {
+			weAreTaxiing = false
 		}
 		
-		// if log level is anything less than demo, we want to limit the update frequency
+		// if log level is anything less than DEMO (3), we want to limit the update frequency
 		if globalSettings.FlightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
 			now := stratuxClock.Milliseconds
 			msd := (now - lastSituationLogMs)
@@ -800,7 +907,11 @@ func logSituation() {
 			}
 			
 		}
-		dataLogChan <- DataLogRow{tbl: "mySituation", data: mySituation}
+		
+		// only bother to write records if we are moving somehow
+		if weAreFlying || weAreTaxiing {
+			dataLogChan <- DataLogRow{tbl: "mySituation", data: mySituation}
+		}
 		lastSituationLogMs = stratuxClock.Milliseconds
 	}
 }
