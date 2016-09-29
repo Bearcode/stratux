@@ -731,7 +731,7 @@ func updateFlightLog(db *sql.DB) {
 	}
 	
 	f := flightlog
-	ret, err := stmt.Exec(f.start_airport_id, f.start_airport_name, f.start_timestamp, f.start_localtime, f.start_tz, f.start_lat, f.start_lng, f.end_airport_name, f.end_timestamp, f.end_localtime, f.end_tz, f.end_lat, f.end_lng, f.duration, f.distance, f.groundspeed, f.route, stratuxStartupID)
+	ret, err := stmt.Exec(f.start_airport_id, f.start_airport_name, f.start_timestamp, f.start_localtime, f.start_tz, f.start_lat, f.start_lng, f.end_airport_id, f.end_airport_name, f.end_timestamp, f.end_localtime, f.end_tz, f.end_lat, f.end_lng, f.duration, f.distance, f.groundspeed, f.route, stratuxStartupID)
 	if err != nil {
 		fmt.Printf("Error executing statement: %v\n", err)
 		return
@@ -833,7 +833,7 @@ func logSituation() {
 		
 		// update the amount of time since startup in milliseconds
 		increment := mySituation.GPSTime.Unix() - flightlog.start_timestamp
-		flightlog.duration = flightlog.duration + (increment.Nanoseconds() / 1000000)
+		flightlog.duration = flightlog.duration + increment
 		
 		/*
 			Flying status state map:
