@@ -833,7 +833,7 @@ func logSituation() {
 		lastPoint = p;
 		
 		// update the amount of time since startup in milliseconds
-		t := stratuxClock.Now()
+		t := stratuxClock.Time.Now()
 		if (lastTimestamp != nil) {
 			increment := t.Sub(*lastTimestamp)
 			flightlog.duration = flightlog.duration + (increment.Nanoseconds() / 1000000)

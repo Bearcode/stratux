@@ -328,8 +328,8 @@ func handleClientsGetRequest(w http.ResponseWriter, r *http.Request) {
 type LogQuery struct {
 	sql string
 	countSQL string
-	limit int64
-	offset int64
+	limit int
+	offset int
 }
 
 /*
