@@ -433,6 +433,12 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	
+	/*
+		Hmmm... The little gosqljson utility works fine for small data sets but seems
+		to die if you feed it a large data set. Not good. Probably need to spool all
+		of the data into a temp file (/tmp/data.json) and then return that file. The
+		
+	*/
     m, err := gosqljson.QueryDbToMapJSON(db, "any", query.sql)
     if err != nil {
     	fmt.Println(err)

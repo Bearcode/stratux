@@ -576,6 +576,9 @@ func heartBeatSender() {
 	for {
 		select {
 		case <-timer.C:
+			// Turn on green ACT LED on the Pi.
+			ioutil.WriteFile("/sys/class/leds/led0/brightness", []byte("1\n"), 0644)
+
 			sendGDL90(makeHeartbeat(), false)
 			sendGDL90(makeStratuxHeartbeat(), false)
 			sendGDL90(makeStratuxStatus(), false)
@@ -772,7 +775,20 @@ func registerADSBTextMessageReceived(msg string) {
 	}
 
 	var wm WeatherMessage
-
+    
+    if (x[0] == "METAR") || (x[0] == "SPECI") {
+        globalStatus.UAT_METAR_total++
+    }
+    if (x[0] == "TAF") || (x[0] == "TAF.AMD") {
+        globalStatus.UAT_TAF_total++
+    }
+    if x[0] == "WINDS" {
+        globalStatus.UAT_TAF_total++
+    }
+    if x[0] == "PIREP" {
+        globalStatus.UAT_PIREP_total++
+    }
+    
 	wm.Type = x[0]
 	wm.Location = x[1]
 	wm.Time = x[2]
@@ -783,6 +799,29 @@ func registerADSBTextMessageReceived(msg string) {
 
 	// Send to weatherUpdate channel for any connected clients.
 	weatherUpdate.Send(wmJSON)
+}
+
+func UpdateUATStats(ProductID uint32) {
+    switch ProductID {
+        case 0,20:
+            globalStatus.UAT_METAR_total++
+        case 1,21:
+            globalStatus.UAT_TAF_total++
+        case 51,52,53,54,55,56,57,58,59,60,61,62,63,64,81,82,83:
+            globalStatus.UAT_NEXRAD_total++
+        // AIRMET and SIGMETS
+        case 2,3,4,6,11,12,22,23,24,26,254:
+            globalStatus.UAT_SIGMET_total++
+        case 5,25:
+            globalStatus.UAT_PIREP_total++
+        case 8:
+            globalStatus.UAT_NOTAM_total++
+        case 413:
+            // Do nothing in the case since text is recorded elsewhere
+            return
+        default:
+            globalStatus.UAT_OTHER_total++
+    }
 }
 
 func parseInput(buf string) ([]byte, uint16) {
@@ -871,6 +910,7 @@ func parseInput(buf string) ([]byte, uint16) {
 			// Get all of the "product ids".
 			for _, f := range uatMsg.Frames {
 				thisMsg.Products = append(thisMsg.Products, f.Product_id)
+                	UpdateUATStats(f.Product_id)
 			}
 			// Get all of the text reports.
 			textReports, _ := uatMsg.GetTextReports()
@@ -1006,6 +1046,14 @@ type status struct {
 	NetworkDataMessagesSentNonqueueableLastSec uint64
 	NetworkDataBytesSentLastSec                uint64
 	NetworkDataBytesSentNonqueueableLastSec    uint64
+	UAT_METAR_total                            uint32
+	UAT_TAF_total                              uint32
+	UAT_NEXRAD_total                           uint32
+	UAT_SIGMET_total                           uint32
+	UAT_PIREP_total                            uint32
+	UAT_NOTAM_total                            uint32
+	UAT_OTHER_total                            uint32
+    
 	Errors                                     []string
 }
 
@@ -1203,6 +1251,8 @@ func gracefulShutdown() {
 
 	//TODO: Any other graceful shutdown functions.
 
+	// Turn off green ACT LED on the Pi.
+	ioutil.WriteFile("/sys/class/leds/led0/brightness", []byte("0\n"), 0644)
 	os.Exit(1)
 }
 

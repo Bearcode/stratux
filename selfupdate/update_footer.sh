@@ -53,6 +53,9 @@ cp -f motd /etc/motd
 cp -f fancontrol.py /usr/bin/
 chmod 755 /usr/bin/fancontrol.py
 
+#airports database
+cp -f airports.sqlite /root/log/
+
 cp -f dump1090 /usr/bin/
 
 # Web files install.

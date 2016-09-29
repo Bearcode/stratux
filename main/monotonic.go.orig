@@ -31,11 +31,16 @@ type monotonic struct {
 func (m *monotonic) Watcher() {
 	for {
 		<-m.ticker.C
+<<<<<<< HEAD
 		m.Milliseconds += 1
 		m.Time = m.Time.Add(1 * time.Millisecond)
+=======
+		m.Milliseconds += 10
+		m.Time = m.Time.Add(10 * time.Millisecond)
 		if m.realTimeSet {
-			m.RealTime = m.RealTime.Add(1 * time.Millisecond)
+			m.RealTime = m.RealTime.Add(10 * time.Millisecond)
 		}
+>>>>>>> upstream/master
 	}
 }
 
