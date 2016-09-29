@@ -808,6 +808,7 @@ func processNMEALine(l string) (sentenceUsed bool) {
 				// Date of Fix, i.e 191115 =  19 November 2015 UTC  field 9
 				gpsTimeStr := fmt.Sprintf("%s %02d:%02d:%06.3f", x[3], hr, min, sec)
 				gpsTime, err := time.Parse("020106 15:04:05.000", gpsTimeStr)
+log.Printf("%s:%v\n", gpsTimeStr, gpsTime)
 				if err == nil {
 					// We only update ANY of the times if all of the time parsing is complete.
 					mySituation.LastGPSTimeTime = stratuxClock.Time

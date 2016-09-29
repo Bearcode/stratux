@@ -639,6 +639,7 @@ func findAirport(lat float64, lng float64) (airport, error) {
 	
 	p := geo.NewPoint(lat, lng)
 	
+	// TODO: return an ICAO ID if there is no FAA ID, or perhaps the other way around
 	rows, err := aptdb.Query("SELECT faaid, icaoid, name, lat, lng, alt FROM airport WHERE lat > ? AND lat < ? AND lng > ? AND lng < ? ORDER BY id ASC;", minLat, maxLat, minLng, maxLng)
 	if err != nil {
 		return ret, err
@@ -766,6 +767,7 @@ func startFlightLog() {
 	if (err == nil) {
 		flightlog.start_airport_id = apt.faaId
 		flightlog.start_airport_name = apt.name
+		flightlog.route = apt.faaId
 	}
 	
 	// update the database entry
