@@ -755,6 +755,7 @@ func startFlightLog() {
 	flightlog.start_lng = float64(mySituation.Lng)
 	
 	// time, timezone, localtime
+fmt.Printf("GPS Time Value: %v", mySituation.GPSTime)
 	flightlog.start_timestamp = mySituation.GPSTime.Unix()
 	flightlog.start_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
 	loc, err := time.LoadLocation(flightlog.start_tz)
