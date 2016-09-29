@@ -66,7 +66,6 @@ var dataLogCurTimestamp int64 // Current timestamp bucket. This is an index on d
 /*
 	values / flags used by flight logging code (see: logSituation() below)
 */
-var lastTimestamp *time.Time
 var lastPoint *geo.Point
 var weAreFlying bool
 var weAreTaxiing bool
@@ -815,7 +814,7 @@ func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
 		
 		// make sure we have valid GPS Clock time
-		if (lastTimestamp == nil) {
+		if (flightlog.start_timestamp == 0) {
 			if (isGPSValid() && isGPSClockValid()) {
 				startFlightLog()
 			} else {
@@ -833,12 +832,8 @@ func logSituation() {
 		lastPoint = p;
 		
 		// update the amount of time since startup in milliseconds
-		t := stratuxClock.Time.Now()
-		if (lastTimestamp != nil) {
-			increment := t.Sub(*lastTimestamp)
-			flightlog.duration = flightlog.duration + (increment.Nanoseconds() / 1000000)
-		}
-		lastTimestamp = &t
+		increment := mySituation.GPSTime.Unix() - flightlog.start_timestamp
+		flightlog.duration = flightlog.duration + (increment.Nanoseconds() / 1000000)
 		
 		/*
 			Flying status state map:
