@@ -415,6 +415,7 @@ var dataLogWriteChan chan DataLogRow
 func dataLogWriter(db *sql.DB) {
 	dataLogWriteChan = make(chan DataLogRow, 10240)
 	shutdownDataLogWriter = make(chan bool)
+	dataUpdateChan = make(chan bool)
 	// The write queue. As data comes in via dataLogChan, it is timestamped and stored.
 	//  When writeTicker comes up, the queue is emptied.
 	writeTicker := time.NewTicker(10 * time.Second)
