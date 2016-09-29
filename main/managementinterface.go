@@ -50,8 +50,7 @@ var tables = map[string]string{
 	"uat": "messages",
 	"es": "es_messages",
 	"ownship": "mySituation",
-	"traffic": "traffic"
-}
+	"traffic": "traffic"}
 
 
 /*
@@ -344,23 +343,23 @@ func getSQL(url string) (LogQuery, error) {
 	
 	// everything starts with "/flightlog"
 	if path[1] != "flightlog" {
-		return "", errors.New("Error - missing required 'flightlog' prefix")
+		return ret, errors.New("Error - missing required 'flightlog' prefix")
 	}
 	
 	// have to at least specify a table
 	if len(path) < 3 {
-		return "", errors.New("Error - missing parameters")
+		return ret, errors.New("Error - missing parameters")
 	}
 	
 	// table name is the 3rd item in the path
 	var table string = tables[path[2]]
 	if table == "" {
-		return "", errors.New("Error - invalid table name")
+		return ret, errors.New("Error - invalid table name")
 	}
 	
 	// unless this is a request for the list of flights, a flight ID is required
 	if table != "startup" && len(path) < 4 {
-		return "", errors.New("Error - request must include a flight ID parameter")
+		return ret, errors.New("Error - request must include a flight ID parameter")
 	}
 	
 	// Return everything for the selected table and flight (startup)
@@ -377,7 +376,7 @@ func getSQL(url string) (LogQuery, error) {
 	if len(path) > 4 {
 		limit, err := strconv.Atoi(path[4])
 		if (err != nil) {
-			return "", errors.New("Error - limit value must be an integer")
+			return ret, errors.New("Error - limit value must be an integer")
 		}
 		ret.sql = ret.sql + "LIMIT " + strconv.Itoa(limit);
 		ret.limit = limit
@@ -390,7 +389,7 @@ func getSQL(url string) (LogQuery, error) {
 	if len(path) > 5 {
 		offset, err := strconv.Atoi(path[5])
 		if (err != nil) {
-			return "", errors.New("Error - offset value must be an integer")
+			return ret, errors.New("Error - offset value must be an integer")
 		}
 		ret.sql = ret.sql + " OFFSET " + strconv.Itoa(offset);
 		ret.offset = offset

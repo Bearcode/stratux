@@ -29,6 +29,7 @@ const (
 	LOG_TIMESTAMP_RESOLUTION = 250 * time.Millisecond
 	MIN_FLIGHT_SPEED = 35
 	MIN_TAXI_SPEED = 10
+	NM_PER_KM = 0.539957
 )
 
 type StratuxTimestamp struct {
@@ -814,7 +815,7 @@ func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
 		
 		// make sure we have valid GPS Clock time
-		if (lastTimeStamp == nil) {
+		if (lastTimestamp == nil) {
 			if (isGPSValid() && isGPSClockValid()) {
 				startFlightLog()
 			} else {
@@ -827,7 +828,7 @@ func logSituation() {
 		p := geo.NewPoint(float64(mySituation.Lat), float64(mySituation.Lng))
 		if (lastPoint != nil) {
 			segment := p.GreatCircleDistance(lastPoint);
-			flightlog.distance = flightlog.distance + (segment * nmPerKm)
+			flightlog.distance = flightlog.distance + (segment * NM_PER_KM)
 		}
 		lastPoint = p;
 		
