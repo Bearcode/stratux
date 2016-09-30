@@ -759,7 +759,7 @@ func startFlightLog() {
 	flightlog.start_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
 	loc, err := time.LoadLocation(flightlog.start_tz)
 	if (err == nil) {
-		flightlog.start_localtime = stratuxClock.Time.In(loc).String()
+		flightlog.start_localtime = stratuxClock.RealTime.In(loc).String()
 	}
 	
 	// airport code and name
@@ -837,7 +837,7 @@ func logSituation() {
 		lastPoint = p;
 		
 		// update the amount of time since startup in seconds
-		flightlog.duration = (stratuxClock.Milliseconds / 1000)
+		flightlog.duration = int64(stratuxClock.Milliseconds / 1000)
 		
 		/*
 			Flying status state map:
