@@ -902,6 +902,7 @@ func logSituation() {
 			switch true {
 			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_STOPPED):
 				// normal startup - do nothing
+				addFlightEvent("Startup")
 				
 			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_TAXIING):
 				// rolling startup or restart - ??
@@ -914,10 +915,12 @@ func logSituation() {
 				addFlightEvent("Restart")
 				
 			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_STOPPED) && (flightState0 == FLIGHT_STATE_TAXIING):
-				// normal taxi-out - do nothing
+				// normal taxi-out
+				addFlightEvent("Taxiing")
 				
 			case (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_STOPPED):
 				// local reposition - do nothing
+				addFlightEvent("Stopped")
 				
 			case (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
 				// normal takeoff
