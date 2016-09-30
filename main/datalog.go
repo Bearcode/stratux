@@ -755,7 +755,7 @@ func startFlightLog() {
 	flightlog.start_lng = float64(mySituation.Lng)
 	
 	// time, timezone, localtime
-	flightlog.start_timestamp = (stratuxClock.RealTime.UnixNano / 1000000)
+	flightlog.start_timestamp = (stratuxClock.RealTime.UnixNano() / 1000000)
 	flightlog.start_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
 	loc, err := time.LoadLocation(flightlog.start_tz)
 	if (err == nil) {
