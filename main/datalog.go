@@ -95,7 +95,7 @@ type FlightEvent struct {
 	event string
 	lat float64
 	lng float64
-	timezone string
+	localtime string
 	airport_id string
 	airport_name string
 	timestamp int64
@@ -843,8 +843,15 @@ func addFlightEvent(event string) {
 	myEvent.event = event
 	myEvent.lat = float64(mySituation.Lat)
 	myEvent.lng = float64(mySituation.Lng)
-	myEvent.timezone = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
-
+	
+	
+	timezone := latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
+	loc, err := time.LoadLocation(timezone)
+	if (err == nil) {
+		lt := stratuxClock.RealTime.In(loc)
+		myEvent.localtime = lt.Format("15:04:05 -0700 MST") 
+	}
+	
 	apt, err := findAirport(float64(mySituation.Lat), float64(mySituation.Lng))
 	if (err == nil) {
 		myEvent.airport_id = apt.faaId
