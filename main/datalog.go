@@ -853,7 +853,7 @@ func addFlightEvent(event string) {
 	
 	myEvent.timestamp = stratuxClock.RealTime.Unix()
 	
-	dataLogChan <- DataLogRow{tbl: "event", data: myEvent}
+	dataLogChan <- DataLogRow{tbl: "events", data: myEvent}
 }
 
 /*
