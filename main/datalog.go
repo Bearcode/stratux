@@ -906,12 +906,12 @@ func logSituation() {
 			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_TAXIING):
 				// rolling startup or restart - ??
 				fmt.Printf("Detected restart or delayed start while taxiing: %s\n", stratuxClock.RealTime.String())
-				addFlightLogEvent("Restart")
+				addFlightEvent("Restart")
 				
 			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_FLYING):
 				// flying startup or restart - ??
 				fmt.Printf("Detected restart or delayed start while flying: %s\n", stratuxClock.RealTime.String())
-				addFlightLogEvent("Restart")
+				addFlightEvent("Restart")
 				
 			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_STOPPED) && (flightState0 == FLIGHT_STATE_TAXIING):
 				// normal taxi-out - do nothing
