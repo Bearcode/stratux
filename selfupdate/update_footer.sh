@@ -56,6 +56,17 @@ chmod 755 /usr/bin/fancontrol.py
 #airports database
 cp -f airports.sqlite /root/log/
 
+#expand 4th partition if necessary
+cp resizeP4 /usr/bin/
+chmod +x /usr/bin/resizeP4
+BLOCKS=`df | grep mmcblk0p4 | awk '{print $2}'`
+if [ $BLOCKS -lt 5000000 ]; then
+	echo "Resizing 4th partition on next boot"
+	cp firstboot /etc/init.d/
+	chmod +x /etc/init.d/firstboot
+	update-rc.d defaults
+fi
+
 cp -f dump1090 /usr/bin/
 
 # Web files install.

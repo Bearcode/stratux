@@ -34,6 +34,8 @@ cp image/99-uavionix.rules work/bin/
 cp image/motd work/bin/
 cp image/fancontrol.py work/bin/
 cp flightbox/airport.sqlite work/bin/
+cp flightbox/resizeP4 work/bin/
+cp flightbox/firstboot work/bin/
 
 #TODO: librtlsdr.
 cd work/
@@ -60,7 +62,7 @@ cat ../selfupdate/update_footer.sh >>update.sh
 
 chmod +x update.sh
 
-OUTF="update-stratux-${stratuxVersion}-${stratuxBuild:0:10}.sh"
+OUTF="update-stratux-FlightBox-${stratuxVersion}-${stratuxBuild:0:10}.sh"
 mv update.sh $OUTF
 
 
