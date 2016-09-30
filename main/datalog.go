@@ -900,38 +900,38 @@ func logSituation() {
 			flightState0 = flightState
 			
 			switch true {
-			case: (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_STOPPED):
+			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_STOPPED):
 				// normal startup - do nothing
 				
-			case: (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_TAXIING):
+			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_TAXIING):
 				// rolling startup or restart - ??
 				fmt.Printf("Detected restart or delayed start while taxiing: %s\n", stratuxClock.RealTime.String())
 				addFlightLogEvent("Restart")
 				
-			case: (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_FLYING):
+			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_FLYING):
 				// flying startup or restart - ??
 				fmt.Printf("Detected restart or delayed start while flying: %s\n", stratuxClock.RealTime.String())
 				addFlightLogEvent("Restart")
 				
-			case: (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_STOPPED) && (flightState0 == FLIGHT_STATE_TAXIING):
+			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_STOPPED) && (flightState0 == FLIGHT_STATE_TAXIING):
 				// normal taxi-out - do nothing
 				
-			case: (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_STOPPED):
+			case (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_STOPPED):
 				// local reposition - do nothing
 				
-			case: (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
+			case (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
 				// normal takeoff
 				addFlightEvent("Takeoff")
 				
-			case: (flightState2 == FLIGHT_STATE_TAXIING) && (flightState1 == FLIGHT_STATE_FLYING) && (flightState0 == FLIGHT_STATE_TAXIING):
+			case (flightState2 == FLIGHT_STATE_TAXIING) && (flightState1 == FLIGHT_STATE_FLYING) && (flightState0 == FLIGHT_STATE_TAXIING):
 				// touchdown
 				addFlightEvent("Touchdown")
 				
-			case: (flightState2 == FLIGHT_STATE_FLYING) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
+			case (flightState2 == FLIGHT_STATE_FLYING) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
 				// touch and go landing
 				stopFlightLog(false)
 				
-			case: (flightState2 == FLIGHT_STATE_FLYING) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_STOPPED):
+			case (flightState2 == FLIGHT_STATE_FLYING) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_STOPPED):
 				// full-stop landing
 				stopFlightLog(true)
 			}
