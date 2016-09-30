@@ -849,7 +849,7 @@ func addFlightEvent(event string) {
 	loc, err := time.LoadLocation(timezone)
 	if (err == nil) {
 		lt := stratuxClock.RealTime.In(loc)
-		myEvent.localtime = lt.Format("15:04:05 -0700 MST") 
+		myEvent.localtime = lt.Format("15:04:05 MST") 
 	}
 	
 	apt, err := findAirport(float64(mySituation.Lat), float64(mySituation.Lng))

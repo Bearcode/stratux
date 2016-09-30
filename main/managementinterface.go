@@ -50,6 +50,7 @@ var tables = map[string]string{
 	"uat": "messages",
 	"es": "es_messages",
 	"ownship": "mySituation",
+	"events": "events",
 	"traffic": "traffic"}
 
 
