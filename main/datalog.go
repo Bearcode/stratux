@@ -30,6 +30,11 @@ const (
 	MIN_FLIGHT_SPEED = 35
 	MIN_TAXI_SPEED = 10
 	NM_PER_KM = 0.539957
+	
+	FLIGHT_STATE_UNKNOWN = -1
+	FLIGHT_STATE_STOPPED = 0
+	FLIGHT_STATE_TAXIING = 1
+	FLIGHT_STATE_FLYING = 2
 )
 
 type StratuxTimestamp struct {
@@ -69,7 +74,9 @@ var dataLogCurTimestamp int64 // Current timestamp bucket. This is an index on d
 var lastPoint *geo.Point
 var weAreFlying bool
 var weAreTaxiing bool
-
+var flightState0 int = FLIGHT_STATE_UNKNOWN
+var flightState1 int = FLIGHT_STATE_UNKNOWN
+var flightState2 int = FLIGHT_STATE_UNKNOWN
 /*
 	airport structure - used by the airport lookup utility
 */
@@ -83,6 +90,16 @@ type airport struct {
 	dst float64
 }
 
+type FlightEvent struct {
+	id int64
+	event string
+	lat float64
+	lng float64
+	timezone string
+	airport_id string
+	airport_name string
+	timestamp int64
+}
 /*
 	checkTimestamp().
 		Verify that our current timestamp is within the LOG_TIMESTAMP_RESOLUTION bucket.
@@ -540,8 +557,8 @@ func dataLog() {
 		makeTable(msg{}, "messages", db)
 		makeTable(esmsg{}, "es_messages", db)
 		makeTable(Dump1090TermMessage{}, "dump1090_terminal", db)
-		//makeTable(StratuxStartup{}, "startup", db)
 		makeTable(FlightLog{}, "startup", db)
+		makeTable(FlightEvent{}, "events", db)
 	}
 
 	// The first entry to be created is the "startup" entry.
@@ -781,14 +798,14 @@ func startFlightLog() {
 	the aircraft makes multiple stops without powering off the system this will indicate
 	all of them.
 */
-func stopFlightLog() {
+func stopFlightLog(fullstop bool) {
 
 	// gps coordinates at startup
 	flightlog.end_lat = float64(mySituation.Lat)
 	flightlog.end_lng = float64(mySituation.Lng)
 	
 	// time, timezone, localtime
-	flightlog.end_timestamp = mySituation.GPSTime.Unix()
+	flightlog.end_timestamp = stratuxClock.RealTime.Unix()
 	flightlog.end_tz = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
 	loc, err := time.LoadLocation(flightlog.end_tz)
 	if (err == nil) {
@@ -801,10 +818,42 @@ func stopFlightLog() {
 		flightlog.end_airport_id = apt.faaId
 		flightlog.end_airport_name = apt.name
 		flightlog.route = flightlog.route + " => " + apt.faaId
+		if (fullstop == false) {
+			flightlog.route = flightlog.route + " (t/g)"
+		}
+	}
+	
+	//create a landing record in the event log table
+	if (fullstop == false) {
+		addFlightEvent("Landing (T/G)")
+	} else {
+		addFlightEvent("Landing")
 	}
 	
 	// update the database entry
 	dataUpdateChan <- true
+}
+
+/*
+	append a flight event record to the 'events' table in the database
+*/
+func addFlightEvent(event string) {
+	
+	var myEvent FlightEvent
+	myEvent.event = event
+	myEvent.lat = float64(mySituation.Lat)
+	myEvent.lng = float64(mySituation.Lng)
+	myEvent.timezone = latlong.LookupZoneName(float64(mySituation.Lat), float64(mySituation.Lng))
+
+	apt, err := findAirport(float64(mySituation.Lat), float64(mySituation.Lng))
+	if (err == nil) {
+		myEvent.airport_id = apt.faaId
+		myEvent.airport_name = apt.name
+	}	
+	
+	myEvent.timestamp = stratuxClock.RealTime.Unix()
+	
+	dataLogChan <- DataLogRow{tbl: "event", data: myEvent}
 }
 
 /*
@@ -828,69 +877,66 @@ func logSituation() {
 			}
 		}
 		
-		// update the distance traveled in nautical miles
-		p := geo.NewPoint(float64(mySituation.Lat), float64(mySituation.Lng))
-		if (lastPoint != nil) {
-			segment := p.GreatCircleDistance(lastPoint);
-			flightlog.distance = flightlog.distance + (segment * NM_PER_KM)
-		}
-		lastPoint = p;
-		
 		// update the amount of time since startup in seconds
 		flightlog.duration = int64(stratuxClock.Milliseconds / 1000)
 		
-		/*
-			Flying status state map:
+		// get the current flight state
+		var flightState int
+		if (mySituation.GroundSpeed < minimumTaxiSpeed) {
+			flightState = FLIGHT_STATE_STOPPED
+		} else
+		if (mySituation.GroundSpeed < minimumFlightSpeed) {
+			flightState = FLIGHT_STATE_TAXIING
+		} else {
+			flightState = FLIGHT_STATE_FLYING
+		} 
+		
+		// look for a transition
+		if (flightState != flightState0) {
+		
+			// shuffle the flight state values
+			flightState2 = flightState1
+			flightState1 = flightState0
+			flightState0 = flightState
 			
-			Standard Transitions
-			stop => taxi {normal startup}
-			taxi => stop {reposition / back-taxi / run-up}
-			taxi => flight {normal takeoff}
-			flight => taxi => flight {touch/go landing}
-			flight => taxi => stop {full-stop landing}
-			
-			Abnormal Transitions
-			flight => stop {um... not so good}
-			stop => flight {mid-air activation}
-			
-			TODO: add altitude delta check - ignore car trips
-			
-		*/
-		// from dead stop to taxi
-		if (weAreFlying == false) && (weAreTaxiing == false) && (mySituation.GroundSpeed < minimumFlightSpeed) && (mySituation.GroundSpeed >= minimumTaxiSpeed) {
-			weAreTaxiing = true
-		} else
-		
-		// from dead stop to flying - mid-air start / restart
-		if (weAreFlying == false) && (weAreTaxiing == false) && (mySituation.GroundSpeed >= minimumFlightSpeed) {
-			weAreFlying = true
-			//TODO: how do we handle these?
-		} else
-		
-		// from taxi to flight
-		if (weAreTaxiing) && (mySituation.GroundSpeed >= minimumFlightSpeed) {
-			weAreTaxiing = false
-			weAreFlying = true
-		} else
-		
-		// from flight to taxi
-		if (weAreFlying == true) && (mySituation.GroundSpeed < minimumFlightSpeed) && (mySituation.GroundSpeed >= minimumTaxiSpeed) {
-			weAreFlying = false
-			weAreTaxiing = true
-			stopFlightLog()
-		} else
-		
-		// from flight to stop - data glitch? crash?
-		if (weAreFlying == true) && (mySituation.GroundSpeed < minimumFlightSpeed) && (mySituation.GroundSpeed < minimumTaxiSpeed) {
-			weAreFlying = false
-			weAreTaxiing = false
-			stopFlightLog()
-		} else
-		
-		// from taxi to stopped
-		if (weAreTaxiing) && (mySituation.GroundSpeed < minimumTaxiSpeed) {
-			weAreTaxiing = false
+			switch true {
+			case: (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_STOPPED):
+				// normal startup - do nothing
+				
+			case: (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_TAXIING):
+				// rolling startup or restart - ??
+				fmt.Printf("Detected restart or delayed start while taxiing: %s\n", stratuxClock.RealTime.String())
+				addFlightLogEvent("Restart")
+				
+			case: (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_FLYING):
+				// flying startup or restart - ??
+				fmt.Printf("Detected restart or delayed start while flying: %s\n", stratuxClock.RealTime.String())
+				addFlightLogEvent("Restart")
+				
+			case: (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_STOPPED) && (flightState0 == FLIGHT_STATE_TAXIING):
+				// normal taxi-out - do nothing
+				
+			case: (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_STOPPED):
+				// local reposition - do nothing
+				
+			case: (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
+				// normal takeoff
+				addFlightEvent("Takeoff")
+				
+			case: (flightState2 == FLIGHT_STATE_TAXIING) && (flightState1 == FLIGHT_STATE_FLYING) && (flightState0 == FLIGHT_STATE_TAXIING):
+				// touchdown
+				addFlightEvent("Touchdown")
+				
+			case: (flightState2 == FLIGHT_STATE_FLYING) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
+				// touch and go landing
+				stopFlightLog(false)
+				
+			case: (flightState2 == FLIGHT_STATE_FLYING) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_STOPPED):
+				// full-stop landing
+				stopFlightLog(true)
+			}
 		}
+		
 		
 		// if log level is anything less than DEMO (3), we want to limit the update frequency
 		if globalSettings.FlightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
@@ -910,9 +956,19 @@ func logSituation() {
 		}
 		
 		// only bother to write records if we are moving somehow
-		if weAreFlying || weAreTaxiing {
+		if (flightState0 == FLIGHT_STATE_FLYING) || (flightState0 == FLIGHT_STATE_TAXIING) {
+		
 			dataLogChan <- DataLogRow{tbl: "mySituation", data: mySituation}
+			
+			// update the distance traveled in nautical miles
+			p := geo.NewPoint(float64(mySituation.Lat), float64(mySituation.Lng))
+			if (lastPoint != nil) {
+				segment := p.GreatCircleDistance(lastPoint);
+				flightlog.distance = flightlog.distance + (segment * NM_PER_KM)
+			}
+			lastPoint = p;
 		}
+		
 		lastSituationLogMs = stratuxClock.Milliseconds
 	}
 }
