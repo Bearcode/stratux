@@ -27,8 +27,10 @@ import (
 
 const (
 	LOG_TIMESTAMP_RESOLUTION = 250 * time.Millisecond
-	MIN_FLIGHT_SPEED = 35
-	MIN_TAXI_SPEED = 10
+	FLIGHT_SPEED = 55
+	MIN_FLIGHT_SPEED = 45
+	TAXI_SPEED = 5
+	MIN_TAXI_SPEED = 2
 	NM_PER_KM = 0.539957
 	
 	FLIGHT_STATE_UNKNOWN = -1
@@ -61,9 +63,6 @@ var dataLogStarted bool
 var dataLogReadyToWrite bool
 var lastSituationLogMs uint64
 
-var minimumFlightSpeed uint16 = MIN_FLIGHT_SPEED
-var minimumTaxiSpeed uint16 = MIN_TAXI_SPEED
-
 var stratuxStartupID int64
 var dataLogTimestamps []StratuxTimestamp
 var dataLogCurTimestamp int64 // Current timestamp bucket. This is an index on dataLogTimestamps which is not necessarily the db id.
@@ -72,8 +71,12 @@ var dataLogCurTimestamp int64 // Current timestamp bucket. This is an index on d
 	values / flags used by flight logging code (see: logSituation() below)
 */
 var lastPoint *geo.Point
-var weAreFlying bool
-var weAreTaxiing bool
+
+var startTaxiingSpeed uint16 = TAXI_SPEED
+var stopTaxiingSpeed uint16 = MIN_TAXI_SPEED
+var startFlyingSpeed uint16 = FLIGHT_SPEED
+var stopFlyingSpeed uint16 = MIN_FLIGHT_SPEED
+
 var flightState0 int = FLIGHT_STATE_UNKNOWN
 var flightState1 int = FLIGHT_STATE_UNKNOWN
 var flightState2 int = FLIGHT_STATE_UNKNOWN
@@ -871,6 +874,11 @@ func addFlightEvent(event string) {
 	FWIW - this requires a valid GPS value and a valid, real time value. Without those,
 	situation records are pretty well worthless anyway.
 */
+var startTaxiingSpeed int
+var stopTaxiingSpeed int
+var startFlyingSpeed int
+var stopFlyingSpeed int
+
 func logSituation() {
 	if globalSettings.ReplayLog && isDataLogReady() {
 		
@@ -887,16 +895,42 @@ func logSituation() {
 		// update the amount of time since startup in seconds
 		flightlog.duration = int64(stratuxClock.Milliseconds / 1000)
 		
+
 		// get the current flight state
-		var flightState int
-		if (mySituation.GroundSpeed < minimumTaxiSpeed) {
+		var flightState int = FLIGHT_STATE_UNKNOWN
+
+		// if we are stopped and the gps detects that we are moving faster than 5 mph, then we are taxiing
+		if ((flightState0 == FLIGHT_STATE_STOPPED) || (flightState0 == FLIGHT_STATE_UNKNOWN)) && ((mySituation.GroundSpeed > startTaxiingSpeed) && (mySituation.GroundSpeed < startFlyingSpeed)) {
+			flightState = FLIGHT_STATE_TAXIING
+		} else
+
+		// if we are taxiing and the gps detects that we are moving faster than 60 mph, then we are flying
+		if ((flightState0 == FLIGHT_STATE_TAXIING) || (flightState0 == FLIGHT_STATE_UNKNOWN)) && (mySituation.GroundSpeed > startFlyingSpeed) {
+			flightState = FLIGHT_STATE_FLYING
+		} else
+		
+		// if we are taxiing and the gps detects that we are moving slower than 2 mph, then we are stopped
+		if (flightState0 == FLIGHT_STATE_TAXIING) && (mySituation.GroundSpeed <= stopTaxiingSpeed) {
 			flightState = FLIGHT_STATE_STOPPED
 		} else
-		if (mySituation.GroundSpeed < minimumFlightSpeed) {
+
+		// if we are flying and the gps detects that we are moving less than 50 mph, then we are taxiing
+		if (flightState0 == FLIGHT_STATE_FLYING) && (mySituation.GroundSpeed <= stopFlyingSpeed) {
+			flightState = FLIGHT_STATE_TAXIING
+		} else
+
+		// non-transitional states
+		if (mySituation.GroundSpeed > startFlyingSpeed) {
+			flightState = FLIGHT_STATE_FLYING
+		} else
+		if (mySituation.GroundSpeed > startTaxiingSpeed) {
 			flightState = FLIGHT_STATE_TAXIING
 		} else {
-			flightState = FLIGHT_STATE_FLYING
-		} 
+			flightState = FLIGHT_STATE_STOPPED
+		}
+		
+		
+		// look for at least
 		
 		// look for a transition
 		if (flightState != flightState0) {
@@ -929,6 +963,9 @@ func logSituation() {
 				// local reposition - do nothing
 				addFlightEvent("Stopped")
 				
+			case (flightState2 == FLIGHT_STATE_TAXIING) && (flightState1 == FLIGHT_STATE_STOPPED) && (flightState0 == FLIGHT_STATE_TAXIING):
+				// just more taxiing - ignore
+				
 			case (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
 				// normal takeoff
 				addFlightEvent("Takeoff")
@@ -938,8 +975,9 @@ func logSituation() {
 				addFlightEvent("Touchdown")
 				
 			case (flightState2 == FLIGHT_STATE_FLYING) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
-				// touch and go landing
+				// touch and go - landing + takeoff
 				stopFlightLog(false)
+				addFlightEvent("Takeoff")
 				
 			case (flightState2 == FLIGHT_STATE_FLYING) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_STOPPED):
 				// full-stop landing

@@ -365,7 +365,8 @@ func getSQL(url string) (LogQuery, error) {
 	
 	// Return everything for the selected table and flight (startup)
 	if table == "startup" {
-		ret.sql = "SELECT * FROM startup ORDER BY id DESC\n"
+		// return only startup records that represent actual flights
+		ret.sql = "SELECT * FROM startup WHERE duration > 0 AND distance > 0 ORDER BY id DESC\n"
 		ret.countSQL = "SELECT count(*) FROM startup;"
 	} else {
 		startup, _ := strconv.Atoi(path[3])
@@ -399,9 +400,10 @@ func getSQL(url string) (LogQuery, error) {
 		ret.offset = 0
 	}
 	
-	// SELECT * FROM {table} 
-	// WHERE startup_id = {startup} ORDER BY timestamp_id ASC 
-	// LIMIT {count} OFFSET {offset}
+	// return format (JSON, CSV, etc)
+	if len(path) > 6 {
+		//TODO: implement formats
+	}
 	
 	return ret, nil
 }
@@ -437,7 +439,10 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 	/*
 		Hmmm... The little gosqljson utility works fine for small data sets but seems
 		to die if you feed it a large data set. Not good. Probably need to spool all
-		of the data into a temp file (/tmp/data.json) and then return that file. The
+		of the data into a temp file (/tmp/data.json) and then return that file. 
+		
+		The other option is to simply limit the return data to slices of the overall
+		set that are small enough to work. Needs some experimentation.
 		
 	*/
     m, err := gosqljson.QueryDbToMapJSON(db, "any", query.sql)
