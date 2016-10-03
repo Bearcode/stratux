@@ -856,8 +856,6 @@ func replaySituation(flight int64, speed int64, db *sql.DB) {
 		fmt.Println("Error selecting data for replay of mySituation\n")
 		return
 	}
-	
-fmt.Println("Selected data for mySituation playback. About to start iterating over rows...")
 
 	for rows.Next() {
 		
@@ -882,6 +880,8 @@ fmt.Println("Selected data for mySituation playback. About to start iterating ov
 		ts1 = ts2
 		ts2 = 0
 		
+		// debug - just to see how long it takes...
+		fmt.Printf("Situation: %.6f°, %.6f° coordinates, %.2f pressure altitude, %.2f GPS altitude, %d GroundSpeed, %.2f ground track, %d timestamp\n", mySituation.Lat, mySituation.Lng, mySituation.Pressure_alt, mySituation.Alt, mySituation.NACp, mySituation.GroundSpeed, mySituation.TrueCourse, ts2) 		
 		// don't do anything else - the ownship message should be sent out
 		// by the heartBeatSender
 		
