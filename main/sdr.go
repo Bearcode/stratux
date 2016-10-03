@@ -310,7 +310,7 @@ func uatReader() {
 	for {
 		uat := <-godump978.OutChan
 		o, msgtype := parseInput(uat)
-		if o != nil && msgtype != 0 {
+		if o != nil && msgtype != 0 && (replayMode == false) {
 			relayMessage(msgtype, o)
 		}
 	}

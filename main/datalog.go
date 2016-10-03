@@ -72,6 +72,7 @@ var dataLogCurTimestamp int64 // Current timestamp bucket. This is an index on d
 */
 var lastPoint *geo.Point
 
+//TODO: Make this a user-configurable option, either manually or using aircraft profile
 var startTaxiingSpeed uint16 = TAXI_SPEED
 var stopTaxiingSpeed uint16 = MIN_TAXI_SPEED
 var startFlyingSpeed uint16 = FLIGHT_SPEED
@@ -714,6 +715,173 @@ type FlightLog struct {
 var flightlog FlightLog
 
 /*
+	replayFlightLog(flight int): replay a flight at a given speed
+*/
+var abortReplay bool
+var uatReplayDone bool
+var 1090ReplayDone bool
+var situationReplayDone bool
+
+func replayUAT(flight int64, speed int32, db *sql.DB) {
+	
+	var ts1, ts2 int64
+	var data string
+	
+	sql := fmt.Sprintf("SELECT timestamp_id, data FROM messages WHERE startup_id = %d ORDER BY timestamp_id ASC;", flight)
+	rows, err := db.Query(sql)
+	if err != nil {
+		return
+	}
+	
+	for rows.Next() {
+		
+		if (ts1 == 0) {
+			rows.Scan(&ts1, &data)
+			continue
+		}
+		
+		if (ts2 == 0) {
+			rows.Scan(&ts2, &data)
+		} 
+
+		// queue the message
+		o, msgtype := parseInput(data)
+		if o != nil && msgtype != 0 {
+			relayMessage(msgtype, o)
+		}
+		
+		// wait for the next message
+		delta := (ts2 - ts1)
+		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
+		ts1 = ts2
+
+		
+		if abortReplay {
+			uatReplayDone = true
+			return
+		}
+	}
+	
+	uatReplayDone = true
+}
+
+func replay1090(flight int64, speed int32, db *sql.DB) {
+	
+	var ts1, ts2 int64
+	var data string
+	
+	sql := fmt.Sprintf("SELECT timestamp_id, data FROM es_messages WHERE startup_id = %d ORDER BY timestamp_id ASC;", flight)
+	rows, err := db.Query(sql)
+	if err != nil {
+		return
+	}
+	
+	for rows.Next() {
+		
+		if (ts1 == 0) {
+			rows.Scan(&ts1, &data)
+			continue
+		}
+		
+		if (ts2 == 0) {
+			rows.Scan(&ts2, &data)
+		} 
+
+		// queue the message
+		var newTi *dump1090Data
+		err = json.Unmarshal([]byte(data), &newTi)
+		if err != nil {
+			log.Printf("can't read ES traffic information from %s: %s\n", data, err.Error())
+			continue
+		}
+		parseDump1090Record(newTi)
+		
+		// wait for the next message
+		delta := (ts2 - ts1)
+		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
+		ts1 = ts2
+
+		
+		if abortReplay {
+			1090ReplayDone = true
+			return
+		}
+	}
+	
+	1090ReplayDone = true
+}
+
+func replaySituation(flight int64, speed int32, db *sql.DB) {
+	
+	var ts1, ts2 int64
+	var data SituationData
+	
+	fields := "Lat, Lng, Quality, HeightAboveEllipsoid, GeoidSep, Satellites, SatellitesTracked, SatellitesSeen, "
+	fields += "Accuracy, NACp, Alt, AccuracyVert, GPSVertVel, LastFixLocalTime, TrueCourse, GroundSpeed, "
+	fields += "LastGroundTrackTime, GPSTime, LastGPSTimeTime, LastValidNMEAMessageTime, LastValidNMEAMessage, "
+	fields += "Temp, Pressure_alt, LastTempPressTime, Pitch, Roll, Gyro_heading, LastAttitudeTime, timestamp_id"
+	sql := fmt.Sprintf("SELECT %s FROM mySituation WHERE startup_id = %d ORDER BY timestamp_id ASC;", fields, flight)
+	rows, err := db.Query(sql)
+	if err != nil {
+		return
+	}
+	
+	for rows.Next() {
+		
+		if (ts1 == 0) {
+			rows.Scan(&ts1, &data)
+			continue
+		}
+		
+		if (ts2 == 0) {
+			rows.Scan(&ts2, &data)
+		} 
+
+		// update the mySituation value with the data value
+		mySituation = data
+		
+		// wait for the next message
+		delta := (ts2 - ts1)
+		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
+		ts1 = ts2
+
+		
+		if abortReplay {
+			situationReplayDone = true
+			return
+		}
+	}
+	
+	situationReplayDone = true
+}
+
+func replayFlightLog(flight int, speed int) {
+	
+	// initialize replay mode 
+	replayMode = true
+	
+	// open another connection to the database
+	db, err := sql.Open("sqlite3", dataLogFilef)
+	if err != nil {
+		log.Printf("sql.Open(): %s\n", err.Error())
+	}
+
+	defer db.Close()
+	
+	go replayUAT(flight, speed, db)
+	go replay1090(flight, speed, db)
+	go replaySituation(flight, speed, db)
+	
+	for {
+		time.Sleep(1 * time.Second)
+		if uatReplayDone && 1090ReplayDone && situationReplayDone {
+			replayMode = false
+			return
+		}
+	}
+}
+
+/*
 	updateFlightLog(): updates the SQLite record for the current startup to indicate
 	the appropriate starting and ending values. This is called by dataLogWriter() on
 	its thread (it is a go routine) when the dataUpdateChan is flagged.
@@ -874,13 +1042,9 @@ func addFlightEvent(event string) {
 	FWIW - this requires a valid GPS value and a valid, real time value. Without those,
 	situation records are pretty well worthless anyway.
 */
-var startTaxiingSpeed int
-var stopTaxiingSpeed int
-var startFlyingSpeed int
-var stopFlyingSpeed int
 
 func logSituation() {
-	if globalSettings.ReplayLog && isDataLogReady() {
+	if globalSettings.ReplayLog && isDataLogReady() && (replayMode == false) {
 		
 		// make sure we have valid GPS Clock time
 		if (flightlog.start_timestamp == 0) {
@@ -940,6 +1104,7 @@ func logSituation() {
 			flightState1 = flightState0
 			flightState0 = flightState
 			
+			// look for event patterns in the past three states
 			switch true {
 			case (flightState2 == FLIGHT_STATE_UNKNOWN) && (flightState1 == FLIGHT_STATE_UNKNOWN) && (flightState0 == FLIGHT_STATE_STOPPED):
 				// normal startup - do nothing
@@ -1022,37 +1187,37 @@ func logSituation() {
 }
 
 func logStatus() {
-	if globalSettings.ReplayLog && isDataLogReady() {
+	if globalSettings.ReplayLog && isDataLogReady() && (replayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "status", data: globalStatus}
 	}
 }
 
 func logSettings() {
-	if globalSettings.ReplayLog && isDataLogReady() {
+	if globalSettings.ReplayLog && isDataLogReady() && (replayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "settings", data: globalSettings}
 	}
 }
 
 func logTraffic(ti TrafficInfo) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (replayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "traffic", data: ti}
 	}
 }
 
 func logMsg(m msg) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF)  {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (replayMode == false)  {
 		dataLogChan <- DataLogRow{tbl: "messages", data: m}
 	}
 }
 
 func logESMsg(m esmsg) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (replayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "es_messages", data: m}
 	}
 }
 
 func logDump1090TermMessage(m Dump1090TermMessage) {
-	if globalSettings.DEBUG && globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) {
+	if globalSettings.DEBUG && globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) && (replayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "dump1090_terminal", data: m}
 	}
 }
@@ -1063,6 +1228,8 @@ func initDataLog() {
 	insertBatchIfs = make(map[string][][]interface{})
 	go dataLogWatchdog()
 
+//TESTING - Replay feature
+replayFlightLog(3, 3)
 	//log.Printf("datalog.go: initDataLog() complete.\n") //REMOVE -- DEBUG
 }
 

@@ -107,6 +107,7 @@ type ReadCloser interface {
 }
 
 var developerMode bool
+var replayMode bool
 
 type msg struct {
 	MessageClass     uint
