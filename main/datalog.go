@@ -440,7 +440,7 @@ func dataLogWriter(db *sql.DB) {
 	dataUpdateChan = make(chan bool)
 	// The write queue. As data comes in via dataLogChan, it is timestamped and stored.
 	//  When writeTicker comes up, the queue is emptied.
-	writeTicker := time.NewTicker(10 * time.Second)
+	writeTicker := time.NewTicker(1 * time.Second)
 	rowsQueuedForWrite := make([]DataLogRow, 0)
 	for {
 		select {
@@ -911,7 +911,7 @@ func replayFlightLog(flight int64, speed int64) {
 	defer db.Close()
 	
 	go replayUAT(flight, speed, db)
-	//go replay1090(flight, speed, db)
+	go replay1090(flight, speed, db)
 	go replaySituation(flight, speed, db)
 	
 	for {

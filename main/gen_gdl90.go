@@ -1385,9 +1385,6 @@ func main() {
 
 	reader := bufio.NewReader(os.Stdin)
 
-//TESTING - Replay feature
-replayFlightLog(3, 1)
-
 	if *replayFlag == true {
 		fp := openReplayFile(*replayUATFilename)
 

@@ -457,6 +457,44 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s\n", ret)
 }
 
+func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
+	
+	var flight int64 = 0
+	var speed int64 = 1
+	
+	path := strings.Split(url, "/")
+	
+	// everything starts with "/replay"
+	if path[1] != "replay" {
+		fmt.Printf("Error - missing replay prefix\n")
+		return
+	}
+	
+	// next parameter is the flight ID. Use 0 to stop current playback
+	flight, err := strconv.Atoi(path[2])
+	if err != nil {
+		fmt.Printf("Error getting flight id from request string: %s\n", err.Error())
+		// should return an error
+		return
+	}
+	
+	if len(path) > 3 {
+		speed, err = strconv.Atoi(path[3])
+		if (err != nil) {
+			fmt.Printf("Error getting speed from request string: %s\n", err.Error())
+			// should return an error
+			return
+		}
+	}
+	
+	if (flight == 0) {
+		abortReplay = true
+	} else {
+		abortReplay = false
+		replayFlightLog(flight, speed)
+	}
+}
+
 func delayReboot() {
 	time.Sleep(1 * time.Second)
 	doReboot()
@@ -669,6 +707,7 @@ func managementInterface() {
 	http.HandleFunc("/updateUpload", handleUpdatePostRequest)
 	http.HandleFunc("/roPartitionRebuild", handleroPartitionRebuild)
 	http.HandleFunc("/flightlog/", handleFlightLogRequest)
+	http.HandleFunc("/replay/", handleReplayRequest)
 	
 	err := http.ListenAndServe(managementAddr, nil)
 
