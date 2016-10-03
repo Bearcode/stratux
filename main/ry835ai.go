@@ -1529,6 +1529,9 @@ If false, 'Quality` is set to 0 ("No fix"), as is the number of satellites in so
 
 func isGPSValid() bool {
 	isValid := false
+	if (replayMode) {
+		isValid = true
+	} else
 	if (stratuxClock.Since(mySituation.LastFixLocalTime) < 15*time.Second) && globalStatus.GPS_connected && mySituation.Quality > 0 {
 		isValid = true
 	} else {
@@ -1539,6 +1542,9 @@ func isGPSValid() bool {
 }
 
 func isGPSGroundTrackValid() bool {
+	if (replayMode) {
+		return true
+	}
 	return stratuxClock.Since(mySituation.LastGroundTrackTime) < 15*time.Second
 }
 
@@ -1551,6 +1557,9 @@ func isAHRSValid() bool {
 }
 
 func isTempPressValid() bool {
+	if (replayMode) {
+		return true
+	}
 	return stratuxClock.Since(mySituation.LastTempPressTime) < 15*time.Second
 }
 

@@ -235,6 +235,8 @@ func makeOwnshipReport() bool {
 	msg[9] = tmp[1]  // Longitude.
 	msg[10] = tmp[2] // Longitude.
 
+
+
 	// This is **PRESSURE ALTITUDE**
 	//FIXME: Temporarily removing "invalid altitude" when pressure altitude not available - using GPS altitude instead.
 	//	alt := uint16(0xFFF) // 0xFFF "invalid altitude."
@@ -305,6 +307,8 @@ func makeOwnshipReport() bool {
 	msg[23] = 0x74
 	msg[24] = 0x75
 	msg[25] = 0x78
+
+fmt.Printf("Sending ownship with %.6f, %.6f coordinates, %d ground speed, %d alt, %.6f ground track.\n", mySituation.Lat, mySituation.Lng, gdSpeed, alt, groundTrack)
 
 	sendGDL90(prepareMessage(msg), false)
 	return true
@@ -572,7 +576,7 @@ func relayMessage(msgtype uint16, msg []byte) {
 }
 
 func heartBeatSender() {
-	timer := time.NewTicker(1 * time.Second)
+	timer := time.NewTicker(500 * time.Millisecond)
 	timerMessageStats := time.NewTicker(2 * time.Second)
 	for {
 		select {
@@ -583,6 +587,7 @@ func heartBeatSender() {
 			sendGDL90(makeHeartbeat(), false)
 			sendGDL90(makeStratuxHeartbeat(), false)
 			sendGDL90(makeStratuxStatus(), false)
+			
 			makeOwnshipReport()
 			makeOwnshipGeometricAltitudeReport()
 
@@ -1379,6 +1384,9 @@ func main() {
 	go cpuTempMonitor()
 
 	reader := bufio.NewReader(os.Stdin)
+
+//TESTING - Replay feature
+replayFlightLog(3, 1)
 
 	if *replayFlag == true {
 		fp := openReplayFile(*replayUATFilename)

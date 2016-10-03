@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"encoding/json"
 	"github.com/kellydunn/golang-geo"
 	"github.com/bradfitz/latlong"
 )
@@ -718,11 +719,11 @@ var flightlog FlightLog
 	replayFlightLog(flight int): replay a flight at a given speed
 */
 var abortReplay bool
-var uatReplayDone bool
-var 1090ReplayDone bool
-var situationReplayDone bool
+var uatReplayComplete bool
+var esReplayComplete bool
+var situationReplayComplete bool
 
-func replayUAT(flight int64, speed int32, db *sql.DB) {
+func replayUAT(flight int64, speed int64, db *sql.DB) {
 	
 	var ts1, ts2 int64
 	var data string
@@ -730,42 +731,58 @@ func replayUAT(flight int64, speed int32, db *sql.DB) {
 	sql := fmt.Sprintf("SELECT timestamp_id, data FROM messages WHERE startup_id = %d ORDER BY timestamp_id ASC;", flight)
 	rows, err := db.Query(sql)
 	if err != nil {
+		fmt.Printf("Error querying messages: %s\n", err.Error())
 		return
 	}
 	
 	for rows.Next() {
 		
 		if (ts1 == 0) {
-			rows.Scan(&ts1, &data)
+			err = rows.Scan(&ts1, &data)
+			if (err != nil) {
+				fmt.Printf("Error scanning row 1: %s\n", err.Error())
+				uatReplayComplete = true
+				return
+			}
 			continue
 		}
 		
 		if (ts2 == 0) {
-			rows.Scan(&ts2, &data)
+			err = rows.Scan(&ts2, &data)
+			if (err != nil) {
+				fmt.Printf("Error scanning row 2: %s\n", err.Error())
+				uatReplayComplete = true
+				return
+			}
 		} 
 
+		if data == "" {
+			fmt.Println("Skipping empty message")
+			continue
+		}
+		
+		// wait for the appropriate number of ms
+		delta := (ts2 - ts1)
+		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
+		ts1 = ts2
+		ts2 = 0
+		
 		// queue the message
 		o, msgtype := parseInput(data)
 		if o != nil && msgtype != 0 {
 			relayMessage(msgtype, o)
 		}
 		
-		// wait for the next message
-		delta := (ts2 - ts1)
-		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
-		ts1 = ts2
-
-		
 		if abortReplay {
-			uatReplayDone = true
+			uatReplayComplete = true
 			return
 		}
 	}
 	
-	uatReplayDone = true
+	uatReplayComplete = true
 }
 
-func replay1090(flight int64, speed int32, db *sql.DB) {
+func replay1090(flight int64, speed int64, db *sql.DB) {
 	
 	var ts1, ts2 int64
 	var data string
@@ -779,15 +796,31 @@ func replay1090(flight int64, speed int32, db *sql.DB) {
 	for rows.Next() {
 		
 		if (ts1 == 0) {
-			rows.Scan(&ts1, &data)
+			err = rows.Scan(&ts1, &data)
+			if (err != nil) {
+				fmt.Printf("Error scanning row 1: %s\n", err.Error())
+				esReplayComplete = true
+				return
+			}
 			continue
 		}
 		
 		if (ts2 == 0) {
-			rows.Scan(&ts2, &data)
+			err = rows.Scan(&ts2, &data)
+			if (err != nil) {
+				fmt.Printf("Error scanning row 2: %s\n", err.Error())
+				esReplayComplete = true
+				return
+			}
 		} 
-
-		// queue the message
+		
+		// wait for the appropriate timeout
+		delta := (ts2 - ts1)
+		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
+		ts1 = ts2
+		ts2 = 0
+		
+		// queue the 1090-ES message
 		var newTi *dump1090Data
 		err = json.Unmarshal([]byte(data), &newTi)
 		if err != nil {
@@ -796,67 +829,76 @@ func replay1090(flight int64, speed int32, db *sql.DB) {
 		}
 		parseDump1090Record(newTi)
 		
-		// wait for the next message
-		delta := (ts2 - ts1)
-		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
-		ts1 = ts2
-
-		
 		if abortReplay {
-			1090ReplayDone = true
+			esReplayComplete = true
 			return
 		}
 	}
 	
-	1090ReplayDone = true
+	esReplayComplete = true
 }
 
-func replaySituation(flight int64, speed int32, db *sql.DB) {
+/*
+	Rather than trying to reload a complete mySituation structure from the database
+	(which is painful due to the lack of discrete date types in SQLite, we're just
+	going to pull the stuff we need to create ownship and ownshipGeometricAltitude 
+	GDL-90 messages.
+*/
+func replaySituation(flight int64, speed int64, db *sql.DB) {
 	
 	var ts1, ts2 int64
-	var data SituationData
 	
-	fields := "Lat, Lng, Quality, HeightAboveEllipsoid, GeoidSep, Satellites, SatellitesTracked, SatellitesSeen, "
-	fields += "Accuracy, NACp, Alt, AccuracyVert, GPSVertVel, LastFixLocalTime, TrueCourse, GroundSpeed, "
-	fields += "LastGroundTrackTime, GPSTime, LastGPSTimeTime, LastValidNMEAMessageTime, LastValidNMEAMessage, "
-	fields += "Temp, Pressure_alt, LastTempPressTime, Pitch, Roll, Gyro_heading, LastAttitudeTime, timestamp_id"
+	fields := "Lat, Lng, Pressure_alt, Alt, NACp, GroundSpeed, TrueCourse, timestamp_id"
+
 	sql := fmt.Sprintf("SELECT %s FROM mySituation WHERE startup_id = %d ORDER BY timestamp_id ASC;", fields, flight)
 	rows, err := db.Query(sql)
 	if err != nil {
+		fmt.Println("Error selecting data for replay of mySituation\n")
 		return
 	}
 	
+fmt.Println("Selected data for mySituation playback. About to start iterating over rows...")
+
 	for rows.Next() {
 		
 		if (ts1 == 0) {
-			rows.Scan(&ts1, &data)
+			err = rows.Scan(&mySituation.Lat, &mySituation.Lng, &mySituation.Pressure_alt, &mySituation.Alt, &mySituation.NACp, &mySituation.GroundSpeed, &mySituation.TrueCourse, &ts1)
+			if (err != nil) {
+				return
+			}
 			continue
 		}
 		
 		if (ts2 == 0) {
-			rows.Scan(&ts2, &data)
+			err = rows.Scan(&mySituation.Lat, &mySituation.Lng, &mySituation.Pressure_alt, &mySituation.Alt, &mySituation.NACp, &mySituation.GroundSpeed, &mySituation.TrueCourse, &ts2)
+			if (err != nil) {
+				return
+			}
 		} 
-
-		// update the mySituation value with the data value
-		mySituation = data
 		
 		// wait for the next message
 		delta := (ts2 - ts1)
 		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
 		ts1 = ts2
-
+		ts2 = 0
+		
+		// don't do anything else - the ownship message should be sent out
+		// by the heartBeatSender
 		
 		if abortReplay {
-			situationReplayDone = true
+			situationReplayComplete = true
 			return
 		}
 	}
 	
-	situationReplayDone = true
+fmt.Println("Completed playback of mySituation log")
+
+	situationReplayComplete = true
 }
 
-func replayFlightLog(flight int, speed int) {
+func replayFlightLog(flight int64, speed int64) {
 	
+	fmt.Printf("Starting reply of flight %d at speed %d.\n", flight, speed)
 	// initialize replay mode 
 	replayMode = true
 	
@@ -869,12 +911,12 @@ func replayFlightLog(flight int, speed int) {
 	defer db.Close()
 	
 	go replayUAT(flight, speed, db)
-	go replay1090(flight, speed, db)
+	//go replay1090(flight, speed, db)
 	go replaySituation(flight, speed, db)
 	
 	for {
 		time.Sleep(1 * time.Second)
-		if uatReplayDone && 1090ReplayDone && situationReplayDone {
+		if uatReplayComplete && esReplayComplete && situationReplayComplete {
 			replayMode = false
 			return
 		}
@@ -1227,9 +1269,6 @@ func initDataLog() {
 	insertString = make(map[string]string)
 	insertBatchIfs = make(map[string][][]interface{})
 	go dataLogWatchdog()
-
-//TESTING - Replay feature
-replayFlightLog(3, 3)
 	//log.Printf("datalog.go: initDataLog() complete.\n") //REMOVE -- DEBUG
 }
 

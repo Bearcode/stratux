@@ -634,8 +634,20 @@ func esListen() {
 				continue
 			}
 
+			if newTi.Icao_addr == 0x07FFFFFF { // used to signal heartbeat
+				if globalSettings.DEBUG {
+					log.Printf("No traffic last 60 seconds. Heartbeat message from dump1090: %s\n", buf)
+				}
+				continue // don't process heartbeat messages
+			}
+	
 			// parse the JSON into a traffic item
-			err := parseDump1090Record(newTi)
+			if parseDump1090Record(newTi) {
+				var eslog esmsg
+				eslog.TimeReceived = stratuxClock.Time
+				eslog.Data = buf
+				logESMsg(eslog) // log raw dump1090:30006 output to SQLite log
+			}
 		}
 	}
 }
@@ -643,14 +655,9 @@ func esListen() {
 /*
 
 */
-func parseDump1090Record(newTi dump1090Data) {
+func parseDump1090Record(newTi *dump1090Data) (bool) {
 
-	if newTi.Icao_addr == 0x07FFFFFF { // used to signal heartbeat
-		if globalSettings.DEBUG {
-			log.Printf("No traffic last 60 seconds. Heartbeat message from dump1090: %s\n", buf)
-		}
-		return // don't process heartbeat messages
-	}
+	var used bool
 
 	if (newTi.Icao_addr & 0x01000000) != 0 { // bit 25 used by dump1090 to signal non-ICAO address
 		newTi.Icao_addr = newTi.Icao_addr & 0x00FFFFFF
@@ -767,10 +774,7 @@ func parseDump1090Record(newTi dump1090Data) {
 			ti.Last_seen = stratuxClock.Time // only update "last seen" data on position updates
 			
 			// ok, message has enough data to make it worth logging
-			var eslog esmsg
-			eslog.TimeReceived = stratuxClock.Time
-			eslog.Data = buf
-			logESMsg(eslog) // log raw dump1090:30006 output to SQLite log
+			used = true
 		}
 	}
 
@@ -931,6 +935,7 @@ func parseDump1090Record(newTi dump1090Data) {
 	//log.Printf("%v\n",traffic)
 	trafficMutex.Unlock()
 
+	return used
 }
 
 /*
