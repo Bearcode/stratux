@@ -1,0 +1,39 @@
+<div class="col-sm-12">
+	<div class="text-center">
+		<p><strong>Version: <span>{{Version}} ({{Build}})</span></strong></p>
+	</div>
+	<div class="panel panel-default">
+		<div class="panel-heading" ng-class="{'section_invisible': !visible_errors}">
+			<span class="panel_label">Errors</span>
+		</div>
+		<div class="panel-body" ng-class="{'section_invisible': !visible_errors}">
+			<ul>
+				<li class="status-error" ng-repeat="err in Errors">
+					<span class="fa fa-exclamation-triangle icon-red"></span> <span class="icon-red">{{err}}</span>
+				</li>
+			</ul>
+		</div>
+		<div class="panel-heading">
+			<span class="panel_label">Status</span>
+			<span ng-show="ConnectState == 'Connected'" class="label label-success">{{ConnectState}}</span>
+			<span ng-hide="ConnectState == 'Connected'" class="label label-danger">{{ConnectState}}</span>
+		</div>
+		<div class="panel-body">
+			<div class="form-horizontal">
+
+				<div class="row">
+					<div class="col-sm-6 label_adj">
+						<strong class="col-xs-5">Date</strong>
+					</div>
+					<div class="col-sm-6 label_adj">
+						<strong class="col-xs-5">Start</strong>
+					</div>
+					<div class="col-sm-6 label_adj">
+						<strong class="col-xs-5">End</strong>
+					</div>
+				</div>
+				
+			</div>
+		</div>
+	</div>
+</div>
