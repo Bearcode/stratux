@@ -445,6 +445,9 @@ func handleFlightLogEventsRequest(args []string, w http.ResponseWriter, r *http.
 
 /*
 	Generates and returns a KML file representing a given flight. 
+	
+	Somebody with some actual KML-fu help! This needs to show height above the ground
+	and other cool stuff.
 */
 func handleFlightLogKMLRequest(args []string, w http.ResponseWriter, r *http.Request) {
 
