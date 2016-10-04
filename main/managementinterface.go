@@ -28,7 +28,6 @@ import (
 	"syscall"
 	"text/template"
 	"time"
-	"errors"
 	"strconv"
 )
 
@@ -326,135 +325,375 @@ func handleClientsGetRequest(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%s\n", clientsJSON)
 }
 
-type LogQuery struct {
-	sql string
-	countSQL string
-	limit int
-	offset int
-}
 
-/*
-	getSQL(): generates an SQL statement for various flight log queries
-*/
-func getSQL(url string) (LogQuery, error) {
 
-	var ret LogQuery
-	
-	path := strings.Split(url, "/")
-	
-	// everything starts with "/flightlog"
-	if path[1] != "flightlog" {
-		return ret, errors.New("Error - missing required 'flightlog' prefix")
-	}
-	
-	// have to at least specify a table
-	if len(path) < 3 {
-		return ret, errors.New("Error - missing parameters")
-	}
-	
-	// table name is the 3rd item in the path
-	var table string = tables[path[2]]
-	if table == "" {
-		return ret, errors.New("Error - invalid table name")
-	}
-	
-	// unless this is a request for the list of flights, a flight ID is required
-	if table != "startup" && len(path) < 4 {
-		return ret, errors.New("Error - request must include a flight ID parameter")
-	}
-	
-	// Return everything for the selected table and flight (startup)
-	if table == "startup" {
-		// return only startup records that represent actual flights
-		ret.sql = "SELECT * FROM startup WHERE duration > 0 AND distance > 0 ORDER BY id DESC\n"
-		ret.countSQL = "SELECT count(*) FROM startup;"
-	} else {
-		startup, _ := strconv.Atoi(path[3])
-		ret.sql = fmt.Sprintf("SELECT * FROM %s WHERE startup_id = %d ORDER BY timestamp_id ASC\n", table, startup)
-		ret.countSQL = fmt.Sprintf("SELECT COUNT(*) FROM `%s` WHERE startup_id = %d", table, startup)
-	}
-	
-	// Limit value (max number of records to return)
-	if len(path) > 4 {
-		limit, err := strconv.Atoi(path[4])
-		if (err != nil) {
-			return ret, errors.New("Error - limit value must be an integer")
-		}
-		ret.sql = ret.sql + "LIMIT " + strconv.Itoa(limit);
-		ret.limit = limit
-	} else {
-		ret.sql = ret.sql + "LIMIT 1000"
-		ret.limit = 1000
-	}
-	
-	// Offset value (from 0)
-	if len(path) > 5 {
-		offset, err := strconv.Atoi(path[5])
-		if (err != nil) {
-			return ret, errors.New("Error - offset value must be an integer")
-		}
-		ret.sql = ret.sql + " OFFSET " + strconv.Itoa(offset);
-		ret.offset = offset
-	} else {
-		ret.sql = ret.sql + " OFFSET 0"
-		ret.offset = 0
-	}
-	
-	// return format (JSON, CSV, etc)
-	if len(path) > 6 {
-		//TODO: implement formats
-	}
-	
-	return ret, nil
-}
+func openDatabase() (db *sql.DB, err error) {
 
-func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
-	
-	db, err := sql.Open("sqlite3", dataLogFilef)
+	db, err = sql.Open("sqlite3", dataLogFilef)
 	if err != nil {
 		log.Printf("sql.Open(): %s\n", err.Error())
 	}
 
-	defer func() {
-		db.Close()
-	}()
-	
-	query, err := getSQL(r.URL.String())
+	_, err = db.Exec("PRAGMA journal_mode=WAL")
 	if err != nil {
-		fmt.Println(err)
-		return
+		log.Printf("db.Exec('PRAGMA journal_mode=WAL') err: %s\n", err.Error())
+	}
+	_, err = db.Exec("PRAGMA synchronous=OFF")
+	if err != nil {
+		log.Printf("db.Exec('PRAGMA journal_mode=WAL') err: %s\n", err.Error())
 	}
 	
-	var count int
-	rows, err := db.Query(query.countSQL)
+	return db, err
+}
+
+func getCount(sql string, db *sql.DB) (count int64) {
+
+	rows, err := db.Query(sql)
+	defer rows.Close()
+	if (err != nil) {
+		return 0
+	}
 	for rows.Next() {
 		err := rows.Scan(&count)
 		if err != nil {
-			// TODO: proper 500 error responses?
-			fmt.Println(err)
+			return 0
+		}
+	}
+
+	return count	
+}
+
+/*
+	handleFlightLogFlightsRequest(): returns a list of flights as JSON. Data is returned
+	in descending (most recent first) timestamp order. If more than 100 flights are 
+	stored, the system will always return the 100 most recent unless an offset value is 
+	passed.
+*/
+func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http.Request) {
+	
+	db, err := openDatabase()
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	defer db.Close()
+	
+	var offset int
+	if (len(args) > 0) {
+		offset, err = strconv.Atoi(args[0])
+		if (err != nil) {
+			http.Error(w, "Invalid flight ID value", http.StatusBadRequest)
 			return
 		}
 	}
 	
-	/*
-		Hmmm... The little gosqljson utility works fine for small data sets but seems
-		to die if you feed it a large data set. Not good. Probably need to spool all
-		of the data into a temp file (/tmp/data.json) and then return that file. 
-		
-		The other option is to simply limit the return data to slices of the overall
-		set that are small enough to work. Needs some experimentation.
-		
-	*/
-    m, err := gosqljson.QueryDbToMapJSON(db, "any", query.sql)
+	var count int64 
+	count = getCount("SELECT COUNT(*) FROM startup WHERE duration > 0 AND distance > 0;", db)
+	
+	sql := fmt.Sprintf("SELECT * FROM startup WHERE duration > 0 AND distance > 0 ORDER BY id DESC LIMIT 100 OFFSET %d;", offset);
+    m, err := gosqljson.QueryDbToMapJSON(db, "any", sql)
     if err != nil {
-    	fmt.Println(err)
+    	http.Error(w, err.Error(), http.StatusBadRequest)
     	return
     }
 
-	ret := fmt.Sprintf("{\"count\": %d, \"limit\": %d, \"offset\": %d, \"data\": %s}", count, query.limit, query.offset, m)
+	ret := fmt.Sprintf("{\"count\": %d, \"limit\": 100, \"offset\": %s, \"data\": %s}", count, offset, m)
 	setNoCache(w)
 	setJSONHeaders(w)
 	fmt.Fprintf(w, "%s\n", ret)
+}
+
+/*
+	handleFlightLogEventsRequest(): returns all events associated with a given flight as
+	JSON. Events are returned in ascending (oldest first) timestamp order.
+*/
+func handleFlightLogEventsRequest(args []string, w http.ResponseWriter, r *http.Request) {
+	
+	db, err := openDatabase()
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	defer db.Close()
+	
+	if (len(args) < 1) {
+		http.Error(w, "/flightlog/events requires a flight id parameter", http.StatusBadRequest)
+    	return
+	}
+	
+	flight, err := strconv.Atoi(args[0])
+	if (err != nil) {
+		http.Error(w, "Invalid flight ID value", http.StatusBadRequest)
+    	return
+	}
+		
+	var count int64 
+	count = getCount(fmt.Sprintf("SELECT COUNT(*) FROM events WHERE startup_id = %d;", flight), db)
+	
+	sql := fmt.Sprintf("SELECT * FROM events WHERE startup_id = %d ORDER BY id ASC LIMIT 1000;", flight);
+    m, err := gosqljson.QueryDbToMapJSON(db, "any", sql)
+    if err != nil {
+    	http.Error(w, err.Error(), http.StatusBadRequest)
+    	return
+    }
+
+	ret := fmt.Sprintf("{\"count\": %d, \"data\": %s}", count, m)
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "%s\n", ret)
+}
+
+/*
+	Generates and returns a KML file representing a given flight. 
+*/
+func handleFlightLogKMLRequest(args []string, w http.ResponseWriter, r *http.Request) {
+
+	db, err := openDatabase()
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	defer db.Close()
+	
+	if (len(args) < 1) {
+		http.Error(w, "/flightlog/kml requires a flight id parameter", http.StatusBadRequest)
+    	return
+	}
+	
+	flight, err := strconv.Atoi(args[0])
+	if (err != nil) {
+		http.Error(w, "Invalid flight ID value", http.StatusBadRequest)
+    	return
+	}
+	
+	var fname, fpath string
+	fname = fmt.Sprintf("flight_%d_track.kml", flight)
+	
+	if (globalStatus.HardwareBuild == "FlightBox") {
+		fpath = fmt.Sprintf("/root/log/%s", fname)
+	} else {
+		fpath = fmt.Sprintf("/var/log/%s", fname)
+	}
+	
+	f, err := os.Create(fpath)
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	
+	header := "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<kml xmlns=\"http://www.opengis.net/kml/2.2\" xmlns:gx=\"http://www.google.com/kml/ext/2.2\">\n<Folder>\n\t<Placemark>\n\t\t<gx:Track>\n"
+	header += "\t\t\t<altitudeMode>absolute</altitudeMode>\n"
+	
+	f.WriteString(header)
+	
+	// generate all the where's and the coords here
+	var sql string
+	var stime, ktime, otime string
+	var itime time.Time
+	var lat, lng, alt float64
+	
+	sql = fmt.Sprintf("SELECT GPSTime FROM mySituation WHERE startup_id = %d ORDER BY timestamp_id ASC;", flight)
+	whenrows, err := db.Query(sql)
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	
+	for whenrows.Next() {
+		err := whenrows.Scan(&stime)
+		if (err != nil) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+    		return
+		}
+		// 2010-05-28T02:02:44Z
+		// 2006-01-02T15:04:05Z
+		itime, _ = time.Parse("2006-01-02 15:04:05 +0000 MST", stime)
+		ktime = itime.Format("2006-01-02T15:04:05Z")
+		otime := fmt.Sprintf("\t\t\t<when>%s</when>\n", ktime)
+		f.WriteString(otime)
+	}
+	whenrows.Close()
+	
+	sql = fmt.Sprintf("SELECT Lat, Lng, Alt FROM mySituation WHERE startup_id = %d ORDER BY timestamp_id ASC;", flight)
+	whererows, err := db.Query(sql)
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	for whererows.Next() {
+		err = whererows.Scan(&lat, &lng, &alt)
+		if (err != nil) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		otime = fmt.Sprintf("\t\t\t<gx:coord>%.6f %.6f %.3f</gx:coord>\n", lng, lat, (alt * 0.3048))
+		f.WriteString(otime)
+	}
+	whererows.Close()
+	
+	footer := "\t\t</gx:Track>\n\t</Placemark>\n</Folder>\n</kml>"
+	f.WriteString(footer)
+	f.Close()
+	
+	http.Redirect(w, r, "/logs/stratux/" + fname, 301)
+}
+
+/*
+	Generates and returns a CSV file representing a given flight. 
+*/
+func handleFlightLogCSVRequest(args []string, w http.ResponseWriter, r *http.Request) {
+
+	db, err := openDatabase()
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	defer db.Close()
+	
+	if (len(args) < 1) {
+		http.Error(w, "/flightlog/csv requires a flight id parameter", http.StatusBadRequest)
+    	return
+	}
+	
+	flight, err := strconv.Atoi(args[0])
+	if (err != nil) {
+		http.Error(w, "Invalid flight ID value", http.StatusBadRequest)
+    	return
+	}
+	
+	fmt.Printf("Flight ID: %d\n", flight)
+}
+
+func handleFlightLogDataRequest(args []string, w http.ResponseWriter, r *http.Request) {
+
+	db, err := openDatabase()
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	defer db.Close()
+	
+	if (len(args) < 1) {
+		http.Error(w, "/flightlog/data requires a flight id parameter", http.StatusBadRequest)
+    	return
+	}
+	
+	flight, err := strconv.Atoi(args[0])
+	if (err != nil) {
+		http.Error(w, "Invalid flight ID value", http.StatusBadRequest)
+    	return
+	}
+	
+	fmt.Printf("Flight ID: %d\n", flight)
+}
+
+func handleFlightLogDeleteRequest(args []string, w http.ResponseWriter, r *http.Request) {
+
+	db, err := openDatabase()
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	defer db.Close()
+	
+	if (len(args) < 1) {
+		http.Error(w, "/flightlog/delete requires a flight id parameter", http.StatusBadRequest)
+    	return
+	}
+	
+	flight, err := strconv.Atoi(args[0])
+	if (err != nil) {
+		http.Error(w, "Invalid flight ID value", http.StatusBadRequest)
+    	return
+	}
+	
+	fmt.Printf("Flight ID: %d\n", flight)
+}
+
+func handleFlightLogPruneRequest(args []string, w http.ResponseWriter, r *http.Request) {
+
+	db, err := openDatabase()
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	defer db.Close()
+	
+	if (len(args) < 1) {
+		http.Error(w, "/flightlog/prune requires a flight id parameter", http.StatusBadRequest)
+    	return
+	}
+	
+	flight, err := strconv.Atoi(args[0])
+	if (err != nil) {
+		http.Error(w, "Invalid flight ID value", http.StatusBadRequest)
+    	return
+	}
+	
+	fmt.Printf("Flight ID: %d\n", flight)
+}
+
+func handleFlightLogPurgeRequest(args []string, w http.ResponseWriter, r *http.Request) {
+
+	db, err := openDatabase()
+	if (err != nil) {
+    	http.Error(w, err.Error(), http.StatusInternalServerError)
+    	return
+	}
+	defer db.Close()
+	
+}
+
+func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
+	
+	//flightlog/flights (returns all flights as JSON, most recent first)
+	//flightlog/events/8 (returns all events for flight 8 as JSON in sequential order)
+	//flightlog/kml/4 (generates a KML file for flight 4 and downloads it)
+	//flightlog/csv/15 (generates a CSV file for flight 15 and downloads it)
+	//flightlog/data/table/flight/limit/offset (select a dump of data from the log)
+	//flightlog/delete/8 (delete data for flight 8)
+	//flightlog/prune/8 (removes ADS-B messages and situation data but leaves flight log / events)
+	//flightlog/purge (delete all flightlog data)
+	
+	path := strings.Split(r.URL.String(), "/")
+	
+	// everything starts with "/flightlog"
+	if path[1] != "flightlog" {
+		http.Error(w, "Missing flightlog prefix", http.StatusBadRequest)
+    	return
+	}
+	
+	// have to at least specify a table
+	if len(path) < 3 {
+		http.Error(w, "Not enough parameters", http.StatusBadRequest)
+    	return
+	}
+	
+	command := path[2]
+	arguments := path[3:]
+	
+	switch command {
+	case "flights":
+		go handleFlightLogFlightsRequest(arguments, w, r)
+	case "events":
+		go handleFlightLogEventsRequest(arguments, w, r)
+	case "kml":
+		handleFlightLogKMLRequest(arguments, w, r)
+	case "csv":
+		handleFlightLogCSVRequest(arguments, w, r)
+	case "data":
+		handleFlightLogDataRequest(arguments, w, r)
+	case "delete":
+		handleFlightLogDeleteRequest(arguments, w, r)
+	case "prune":
+		handleFlightLogPruneRequest(arguments, w, r)
+	case "purge":
+		handleFlightLogPurgeRequest(arguments, w, r)
+	default:
+		http.Error(w, "Error - invalid FlightLog command.", http.StatusBadRequest)
+	}
+	
+	return
 }
 
 func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
@@ -462,37 +701,67 @@ func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
 	var flight int64 = 0
 	var speed int64 = 1
 	
-	path := strings.Split(url, "/")
+	// /replay/play/12/5/1 (replay flight 12 on a loop)
+	// /replay/pause (stop at current timestamp - returns current timestamp)
+	// /replay/resume (resume playing after pause)
+	// /replay/speed/3 (adjust the playback speed)
+	// /replay/stop (cancel current playback)
+	// /replay/jump/392952 (jump to timestamp 392952 and play)
+	// /replay/status (returns the current status and, if playing, timestamp)
 	
-	// everything starts with "/replay"
-	if path[1] != "replay" {
-		fmt.Printf("Error - missing replay prefix\n")
+	path := strings.Split(r.URL.String(), "/")
+	
+	// minimum of 3 elements
+	if len(path) < 3 {
+		http.Error(w, "Replay requests require a command.", http.StatusBadRequest)
 		return
 	}
 	
+	// everything starts with "/replay"
+	if path[1] != "replay" {
+		http.Error(w, "Error - missing 'replay' prefix.", http.StatusBadRequest)
+		return
+	}
+	
+	// commands are "play" "abort" "index"
+	command := path[2]
+	fmt.Printf("Command: %s\n", command)
+//TODO - add command processor
+	
 	// next parameter is the flight ID. Use 0 to stop current playback
-	flight, err := strconv.Atoi(path[2])
+	flight, err := strconv.ParseInt(path[2], 10, 64)
 	if err != nil {
 		fmt.Printf("Error getting flight id from request string: %s\n", err.Error())
-		// should return an error
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	
 	if len(path) > 3 {
-		speed, err = strconv.Atoi(path[3])
+		speed, err = strconv.ParseInt(path[3], 10, 64)
 		if (err != nil) {
 			fmt.Printf("Error getting speed from request string: %s\n", err.Error())
-			// should return an error
+			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
 	}
 	
+	var ret string
 	if (flight == 0) {
-		abortReplay = true
+		if (!globalStatus.ReplayMode) {
+			http.Error(w, "Cannot cancel replay - no replay active.", http.StatusBadRequest)
+			return
+		} else {
+			abortReplay = true
+		}
 	} else {
 		abortReplay = false
 		replayFlightLog(flight, speed)
+		ret = fmt.Sprintf("{\"status\": \"playing\"}")
 	}
+	
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "%s\n", ret)
 }
 
 func delayReboot() {

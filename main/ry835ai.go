@@ -1322,7 +1322,7 @@ func gpsSerialReader() {
 
 	i := 0 //debug monitor
 	scanner := bufio.NewScanner(serialPort)
-	for scanner.Scan() && globalStatus.GPS_connected && globalSettings.GPS_Enabled && (replayMode == false) {
+	for scanner.Scan() && globalStatus.GPS_connected && globalSettings.GPS_Enabled && (globalStatus.ReplayMode == false) {
 		i++
 		if globalSettings.DEBUG && i%100 == 0 {
 			log.Printf("gpsSerialReader() scanner loop iteration i=%d\n", i) // debug monitor
@@ -1529,7 +1529,7 @@ If false, 'Quality` is set to 0 ("No fix"), as is the number of satellites in so
 
 func isGPSValid() bool {
 	isValid := false
-	if (replayMode) {
+	if (globalStatus.ReplayMode) {
 		isValid = true
 	} else
 	if (stratuxClock.Since(mySituation.LastFixLocalTime) < 15*time.Second) && globalStatus.GPS_connected && mySituation.Quality > 0 {
@@ -1542,7 +1542,7 @@ func isGPSValid() bool {
 }
 
 func isGPSGroundTrackValid() bool {
-	if (replayMode) {
+	if (globalStatus.ReplayMode) {
 		return true
 	}
 	return stratuxClock.Since(mySituation.LastGroundTrackTime) < 15*time.Second
@@ -1557,7 +1557,7 @@ func isAHRSValid() bool {
 }
 
 func isTempPressValid() bool {
-	if (replayMode) {
+	if (globalStatus.ReplayMode) {
 		return true
 	}
 	return stratuxClock.Since(mySituation.LastTempPressTime) < 15*time.Second

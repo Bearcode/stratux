@@ -31,7 +31,7 @@ const (
 	FLIGHT_SPEED = 55
 	MIN_FLIGHT_SPEED = 45
 	TAXI_SPEED = 5
-	MIN_TAXI_SPEED = 2
+	MIN_TAXI_SPEED = 0
 	NM_PER_KM = 0.539957
 	
 	FLIGHT_STATE_UNKNOWN = -1
@@ -735,6 +735,8 @@ func replayUAT(flight int64, speed int64, db *sql.DB) {
 		return
 	}
 	
+	defer rows.Close()
+	
 	for rows.Next() {
 		
 		if (ts1 == 0) {
@@ -775,10 +777,12 @@ func replayUAT(flight int64, speed int64, db *sql.DB) {
 		
 		if abortReplay {
 			uatReplayComplete = true
+			fmt.Printf("Aborting playback of UAT log at %d\n", ts2)
 			return
 		}
 	}
 	
+	fmt.Println("Completed playback of UAT log.")
 	uatReplayComplete = true
 }
 
@@ -792,6 +796,8 @@ func replay1090(flight int64, speed int64, db *sql.DB) {
 	if err != nil {
 		return
 	}
+	
+	defer rows.Close()
 	
 	for rows.Next() {
 		
@@ -831,16 +837,18 @@ func replay1090(flight int64, speed int64, db *sql.DB) {
 		
 		if abortReplay {
 			esReplayComplete = true
+			fmt.Printf("Aborting playback of 1090-ES log at %d\n", ts2)
 			return
 		}
 	}
 	
+	fmt.Println("Completed playback of 1090-ES log.")
 	esReplayComplete = true
 }
 
 /*
 	Rather than trying to reload a complete mySituation structure from the database
-	(which is painful due to the lack of discrete date types in SQLite, we're just
+	(which is painful due to the lack of discrete date types in SQLite), we're just
 	going to pull the stuff we need to create ownship and ownshipGeometricAltitude 
 	GDL-90 messages.
 */
@@ -856,7 +864,9 @@ func replaySituation(flight int64, speed int64, db *sql.DB) {
 		fmt.Println("Error selecting data for replay of mySituation\n")
 		return
 	}
-
+	
+	defer rows.Close()
+	
 	for rows.Next() {
 		
 		if (ts1 == 0) {
@@ -879,19 +889,18 @@ func replaySituation(flight int64, speed int64, db *sql.DB) {
 		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
 		ts1 = ts2
 		ts2 = 0
-		
-		// debug - just to see how long it takes...
-		fmt.Printf("Situation: %.6f°, %.6f° coordinates, %.2f pressure altitude, %.2f GPS altitude, %d GroundSpeed, %.2f ground track, %d timestamp\n", mySituation.Lat, mySituation.Lng, mySituation.Pressure_alt, mySituation.Alt, mySituation.NACp, mySituation.GroundSpeed, mySituation.TrueCourse, ts2) 		
+
 		// don't do anything else - the ownship message should be sent out
 		// by the heartBeatSender
 		
 		if abortReplay {
 			situationReplayComplete = true
+			fmt.Printf("Aborting playback of mySituation log at %d\n", ts2)
 			return
 		}
 	}
 	
-fmt.Println("Completed playback of mySituation log")
+	fmt.Println("Completed playback of mySituation log.")
 
 	situationReplayComplete = true
 }
@@ -899,8 +908,9 @@ fmt.Println("Completed playback of mySituation log")
 func replayFlightLog(flight int64, speed int64) {
 	
 	fmt.Printf("Starting reply of flight %d at speed %d.\n", flight, speed)
+	
 	// initialize replay mode 
-	replayMode = true
+	globalStatus.ReplayMode = true
 	
 	// open another connection to the database
 	db, err := sql.Open("sqlite3", dataLogFilef)
@@ -917,10 +927,14 @@ func replayFlightLog(flight int64, speed int64) {
 	for {
 		time.Sleep(1 * time.Second)
 		if uatReplayComplete && esReplayComplete && situationReplayComplete {
-			replayMode = false
-			return
+			break
 		}
 	}
+	
+	globalStatus.ReplayMode = false
+	
+	fmt.Println("Completed playback of replay log.")
+	
 }
 
 /*
@@ -1086,7 +1100,7 @@ func addFlightEvent(event string) {
 */
 
 func logSituation() {
-	if globalSettings.ReplayLog && isDataLogReady() && (replayMode == false) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalStatus.ReplayMode == false) {
 		
 		// make sure we have valid GPS Clock time
 		if (flightlog.start_timestamp == 0) {
@@ -1106,7 +1120,7 @@ func logSituation() {
 		var flightState int = FLIGHT_STATE_UNKNOWN
 
 		// if we are stopped and the gps detects that we are moving faster than 5 mph, then we are taxiing
-		if ((flightState0 == FLIGHT_STATE_STOPPED) || (flightState0 == FLIGHT_STATE_UNKNOWN)) && ((mySituation.GroundSpeed > startTaxiingSpeed) && (mySituation.GroundSpeed < startFlyingSpeed)) {
+		if ((flightState0 == FLIGHT_STATE_STOPPED) || (flightState0 == FLIGHT_STATE_UNKNOWN)) && ((mySituation.GroundSpeed > startTaxiingSpeed) && (mySituation.GroundSpeed <= startFlyingSpeed)) {
 			flightState = FLIGHT_STATE_TAXIING
 		} else
 
@@ -1115,7 +1129,7 @@ func logSituation() {
 			flightState = FLIGHT_STATE_FLYING
 		} else
 		
-		// if we are taxiing and the gps detects that we are moving slower than 2 mph, then we are stopped
+		// if we are taxiing and the gps detects that we are moving 0 mph, then we are stopped
 		if (flightState0 == FLIGHT_STATE_TAXIING) && (mySituation.GroundSpeed <= stopTaxiingSpeed) {
 			flightState = FLIGHT_STATE_STOPPED
 		} else
@@ -1172,6 +1186,7 @@ func logSituation() {
 				
 			case (flightState2 == FLIGHT_STATE_TAXIING) && (flightState1 == FLIGHT_STATE_STOPPED) && (flightState0 == FLIGHT_STATE_TAXIING):
 				// just more taxiing - ignore
+				addFlightEvent("Taxiing")
 				
 			case (flightState2 == FLIGHT_STATE_STOPPED) && (flightState1 == FLIGHT_STATE_TAXIING) && (flightState0 == FLIGHT_STATE_FLYING):
 				// normal takeoff
@@ -1229,37 +1244,37 @@ func logSituation() {
 }
 
 func logStatus() {
-	if globalSettings.ReplayLog && isDataLogReady() && (replayMode == false) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalStatus.ReplayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "status", data: globalStatus}
 	}
 }
 
 func logSettings() {
-	if globalSettings.ReplayLog && isDataLogReady() && (replayMode == false) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalStatus.ReplayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "settings", data: globalSettings}
 	}
 }
 
 func logTraffic(ti TrafficInfo) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (replayMode == false) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (globalStatus.ReplayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "traffic", data: ti}
 	}
 }
 
 func logMsg(m msg) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (replayMode == false)  {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (globalStatus.ReplayMode == false)  {
 		dataLogChan <- DataLogRow{tbl: "messages", data: m}
 	}
 }
 
 func logESMsg(m esmsg) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (replayMode == false) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (globalStatus.ReplayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "es_messages", data: m}
 	}
 }
 
 func logDump1090TermMessage(m Dump1090TermMessage) {
-	if globalSettings.DEBUG && globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) && (replayMode == false) {
+	if globalSettings.DEBUG && globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) && (globalStatus.ReplayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "dump1090_terminal", data: m}
 	}
 }

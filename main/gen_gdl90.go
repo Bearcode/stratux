@@ -107,7 +107,6 @@ type ReadCloser interface {
 }
 
 var developerMode bool
-var replayMode bool
 
 type msg struct {
 	MessageClass     uint
@@ -1059,6 +1058,7 @@ type status struct {
 	UAT_PIREP_total                            uint32
 	UAT_NOTAM_total                            uint32
 	UAT_OTHER_total                            uint32
+    ReplayMode								   bool
     
 	Errors                                     []string
 }

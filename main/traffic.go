@@ -615,7 +615,7 @@ func esListen() {
 			buf = strings.Trim(buf, "\r\n")
 
 			// If a replay is active, don't bother processing the data
-			if replayMode == true {
+			if globalStatus.ReplayMode == true {
 				// the replay system will create / manage ti records
 				continue
 			}
