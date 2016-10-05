@@ -144,6 +144,18 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 			setSettings(angular.toJson(newsettings));
 		}
 	};
+	$scope.postReplay = function () {
+		$window.location.href = "/";
+		$location.path('/home');
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/15/5"
+		$http.post(replayUrl).
+		then(function (response) {
+			// do nothing
+			// $scope.$apply();
+		}, function (response) {
+			// do nothing
+		});
+	};
 
 	$scope.postShutdown = function () {
 		$window.location.href = "/";
