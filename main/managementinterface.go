@@ -388,9 +388,9 @@ func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http
 	}
 	
 	var count int64 
-	count = getCount("SELECT COUNT(*) FROM startup WHERE duration > 0 AND distance > 0;", db)
+	count = getCount("SELECT COUNT(*) FROM startup WHERE duration > 1 AND distance > 1 AND ((max_alt - start_alt) > 350);", db)
 	
-	sql := fmt.Sprintf("SELECT * FROM startup WHERE duration > 0 AND distance > 0 AND (max_alt - start_alt > 350) ORDER BY id DESC LIMIT 100 OFFSET %d;", offset);
+	sql := fmt.Sprintf("SELECT * FROM startup WHERE duration > 1 AND distance > 1 AND ((max_alt - start_alt) > 350) ORDER BY id DESC LIMIT 100 OFFSET %d;", offset);
     m, err := gosqljson.QueryDbToMapJSON(db, "any", sql)
     if err != nil {
     	http.Error(w, err.Error(), http.StatusBadRequest)
@@ -452,6 +452,8 @@ func handleFlightLogEventsRequest(args []string, w http.ResponseWriter, r *http.
 */
 func handleFlightLogKMLRequest(args []string, w http.ResponseWriter, r *http.Request) {
 
+	fmt.Println("about to create KML file")
+	
 	db, err := openDatabase()
 	if (err != nil) {
     	http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -470,14 +472,20 @@ func handleFlightLogKMLRequest(args []string, w http.ResponseWriter, r *http.Req
     	return
 	}
 	
+	fmt.Printf("creating KML file for flight %d\n", flight)
+	
 	var fname, fpath string
 	fname = fmt.Sprintf("flight_%d_track.kml", flight)
+	
+	fmt.Printf("filename will be %s\n", fname)
 	
 	if (globalStatus.HardwareBuild == "FlightBox") {
 		fpath = fmt.Sprintf("/root/log/%s", fname)
 	} else {
 		fpath = fmt.Sprintf("/var/log/%s", fname)
 	}
+	
+	fmt.Printf("file path is %s\n", fpath)
 	
 	f, err := os.Create(fpath)
 	if (err != nil) {
@@ -518,6 +526,8 @@ func handleFlightLogKMLRequest(args []string, w http.ResponseWriter, r *http.Req
 	}
 	whenrows.Close()
 	
+	fmt.Println("wrote out when values for KML")
+	
 	sql = fmt.Sprintf("SELECT Lat, Lng, Alt FROM mySituation WHERE startup_id = %d ORDER BY timestamp_id ASC;", flight)
 	whererows, err := db.Query(sql)
 	if (err != nil) {
@@ -535,11 +545,15 @@ func handleFlightLogKMLRequest(args []string, w http.ResponseWriter, r *http.Req
 	}
 	whererows.Close()
 	
+	fmt.Println("Wrote out where values for KML")
+	
 	footer := "\t\t</gx:Track>\n\t</Placemark>\n</Folder>\n</kml>"
 	f.WriteString(footer)
 	f.Close()
 	
-	http.Redirect(w, r, "/logs/stratux/" + fname, 301)
+	fmt.Println("Closed KML file")
+	
+	http.Redirect(w, r, "/logs/stratux/" + fname, 303)
 }
 
 /*

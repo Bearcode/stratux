@@ -9,12 +9,12 @@
 		<div class="panel-body">
 			<div class="row">
 				<div class="col-lg-12">
-					<span class="col-xs-2" ng-hide="showReg"><strong>Date</strong></span>
-					<span class="col-xs-1" ng-hide="showReg"><strong>Time (Z)</strong></span>
+					<span class="col-xs-1" ng-hide="showReg"><strong>Date</strong></span>
+					<span class="col-xs-2" ng-hide="showReg"><strong>Time (Z)</strong></span>
 					<span class="col-xs-1" ng-hide="showReg"><strong>Start</strong></span>
 					<span class="col-xs-1" ng-hide="showReg"><strong>End</strong></span>
 					<span class="col-xs-1" ng-hide="showReg"><strong>Duration</strong></span>
-					<span class="col-xs-1" ng-hide="showReg"><strong>Distance</strong></span>
+					<span class="col-xs-1" ng-hide="showReg"><strong>Dist.</strong></span>
 					<span class="col-xs-5" ng-hide="showReg"><strong>Actions</strong></span>
 				</div>
 			</div>
@@ -22,14 +22,76 @@
 			<div class="row" ng-repeat="flight in data_list | orderBy: 'dist'">
 				<div class="separator"></div>
 				<div class="col-lg-12">
-					<span class="col-xs-2" ng-hide="showReg">{{flight.date}}</span>
-					<span class="col-xs-1" ng-hide="showReg">{{flight.time}}</span>
+					<span class="col-xs-1" ng-hide="showReg">{{flight.date}}</span>
+					<span class="col-xs-2" ng-hide="showReg">{{flight.time}}</span>
 					<span class="col-xs-1" ng-hide="showReg">{{flight.start_airport_id}}</span>
 					<span class="col-xs-1" ng-hide="showReg">{{flight.end_airport_id}}</span>
 					<span class="col-xs-1" ng-hide="showReg">{{flight.hms}}</span>
 					<span class="col-xs-1" ng-hide="showReg">{{flight.distance}}</span>
-					<span class="col-xs-5" ng-hide="showReg"><button ng-click="replayFlight(flight.id)">Replay</button></span>
+					<span class="col-xs-5" ng-hide="showReg">
+						<button ng-click="replayFlight(flight.id)">Replay</button>&nbsp;
+						<button ng-click="getDetails(flight.id)">Details</button>&nbsp;
+						<a target="_blank" href="/flightlog/kml/{{flight.id}}">KML</a>&nbsp;
+						<a target="_blank" href="/flightlog/csv/{{flight.id}}">CSV</a>
+					</span>
 				</div>			
+			</div>
+			
+			<!-- footer -->
+		<div class="panel-body flog-footer">
+			<div class="separator"></div>
+			<div class="row">
+				<div class="col-sm-3">
+					<label class="control-label col-xs-6">Replay Speed</label>
+					<span class="col-xs-3">
+						<select style="margin-top:5px;" ng-model="playbackSpeed" ng-options="x for x in speeds">
+						</select>
+					</span>
+				</div>
+				<div class="col-sm-3">
+					<label class="control-label col-xs-6">Replay Controls</label>
+					<button style="margin-top:5px;" ng-disabled="ReplayMode == false" ng-click="replayFlight(flight.id)">Pause</button>
+					<button style="margin-top:5px;" ng-disabled="ReplayMode == false" ng-click="replayFlight(flight.id)">Stop</button>
+				</div>
+				<!--
+				<div class="col-sm-4">
+					<label class="control-label col-xs-6">GPS Status</label>
+					<span ng-show="GPS_connected" class="label label-success col-xs-3" style="font-size:100%; display:block; height: 34px; line-height: 34px">Valid</span>
+					<span ng-hide="GPS_connected" class="label label-danger col-xs-3" style="font-size:100%; display:block; height: 34px; line-height: 34px">No Fix</span>
+				</div>
+				-->
+			</div>
+		</div>
+		</div>
+	</div>
+	
+	<div class="panel panel-default">
+		<div class="panel-heading">
+			<span class="panel_label">Flight Details</span>
+		</div>
+		<div class="panel-body">
+			<div class="row">
+				<div class="col-lg-12">
+					<span class="col-xs-2" ng-hide="showReg"><strong>Event</strong></span>
+					<span class="col-xs-4" ng-hide="showReg"><strong>Location</strong></span>
+					<span class="col-xs-1" ng-hide="showReg"><strong>Time (L)</strong></span>
+					<span class="col-xs-1" ng-hide="showReg"><strong>Time (Z)</strong></span>
+					<span class="col-xs-4" ng-hide="showReg"><strong>Actions</strong></span>
+				</div>
+			</div>
+			
+			<!-- events -->
+			<div class="row" ng-repeat="event in flight_events | orderBy: 'id'">
+				<div class="separator"></div>
+				<div class="col-lg-12">
+					<span class="col-xs-2" ng-hide="showReg">{{event.event}}</span>
+					<span class="col-xs-4" ng-hide="showReg">{{event.location}}</span>
+					<span class="col-xs-1" ng-hide="showReg">{{event.timeLocal}}</span>
+					<span class="col-xs-1" ng-hide="showReg">{{event.timeZulu}}</span>
+					<span class="col-xs-4" ng-hide="showReg">
+						<button ng-hide="ReplayMode == false" ng-click="jumpToTimestamp(event.timestamp)">Jump</button>&nbsp;
+					</span>
+				</div>
 			</div>
 		</div>
 	</div>

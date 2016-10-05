@@ -6,19 +6,44 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 
 	$scope.$parent.helppage = 'plates/flightlog-help.html';
 	$scope.data_list = [];
+	$scope.flight_events = [];
+	$scope.ReplayMode = false;
+	$scope.currentFlight = 0;
+	$scope.speeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+	$scope.playbackSpeed = 5;
+	
+	$scope.currentPage = 1;
+	$scope.pageSize = 10;
+  
+	$scope.$watch('playbackSpeed', function(newValue){
+  		// send the new playback speed to the controller if a playback is active
+	});
 	
 	$scope.replayFlight = function (id) {
-		$window.location.href = "/";
-		$location.path('/home');
-		var replayUrl = "http://" + URL_HOST_BASE + "/replay/" + id + "/5"
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/" + id + "/5";
 		$http.post(replayUrl).
 		then(function (response) {
-			// do nothing
-			// $scope.$apply();
+			$scope.GetDetails(id);
 		}, function (response) {
 			// do nothing
 		});
 	};
+	
+	$scope.getDetails = function(id) {
+		$scope.CurrentFlight = id;
+		getEvents(id);
+	}
+	
+	$scope.jumpToTimestamp = function(ts) {
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/jump/" + ts;
+		$http.post(replayUrl).
+		then(function (response) {
+			// do nothing
+			console.log("Jumped to " + ts);
+		}, function (response) {
+			// do nothing
+		});
+	}
 	
 	function utcTimeString(epoc) {
 		var time = "";
@@ -54,6 +79,14 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 			("0" + m.getUTCHours()).slice(-2) + ":" +
 			("0" + m.getUTCMinutes()).slice(-2) + ":" +
 			("0" + m.getUTCSeconds()).slice(-2);
+		return st;
+	}
+	
+	function getShortTimeLocal(m) {
+		var st =
+			("0" + m.getHours()).slice(-2) + ":" +
+			("0" + m.getMinutes()).slice(-2) + ":" +
+			("0" + m.getSeconds()).slice(-2);
 		return st;
 	}
 	
@@ -132,7 +165,7 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 		then(function (response) {
 			var data = angular.fromJson(response.data);
 			var flights = data.data;
-			var cnt = data.count;
+			var cnt = flights.length;
 			
 			for (var i = 0; i < cnt; i++) {
 				flight = flights[i];
@@ -150,6 +183,48 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 			$scope.raw_data = "error getting tower data";
 		});
 	};
+
+
+	function getEvents(id) {
+		// Simple GET request example (note: responce is asynchronous)
+		$http.get("/flightlog/events/" + id).
+		then(function (response) {
+			var data = angular.fromJson(response.data);
+			var events = data.data;
+			var tmp = [];
+			var last = "";
+			
+			for (var i = 0; i < events.length; i++) {
+				var ce = events[i];
+				
+				if (ce.event == last) {
+					continue;
+				}
+				
+				var evt = {};
+				evt.event = ce.event;
+				evt.location = ce.airport_name + " (" + ce.airport_id + ")"
+				var m = new Date(parseInt(ce.timestamp) * 1000);
+				var s = getShortTime(m)
+				evt.timeZulu = s
+				evt.timeLocal = getShortTimeLocal(m)
+				evt.timestamp = ce.timestamp
+				evt.id = ce.id
+				evt.flight = id;
+				
+				last = ce.event;
+				
+				tmp.push(evt)
+			}
+			$scope.flight_events = tmp;
+			//$scope.UAT_Towers = cnt;
+			
+			//$scope.$apply();
+		}, function (response) {
+			$scope.raw_data = "error getting tower data";
+		});
+	};
+
 
 	// periodically get the tower list
 	var updateTowers = $interval(function () {

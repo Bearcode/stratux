@@ -307,7 +307,8 @@ func makeOwnshipReport() bool {
 	msg[24] = 0x75
 	msg[25] = 0x78
 
-fmt.Printf("Sending ownship with %.6f, %.6f coordinates, %d ground speed, %d alt, %.6f ground track.\n", mySituation.Lat, mySituation.Lng, gdSpeed, alt, groundTrack)
+	// debug: useful for monitoring GPS drift on the ground
+	//fmt.Printf("Sending ownship with %.6f, %.6f coordinates, %d ground speed, %d alt, %.6f ground track.\n", mySituation.Lat, mySituation.Lng, gdSpeed, alt, groundTrack)
 
 	sendGDL90(prepareMessage(msg), false)
 	return true

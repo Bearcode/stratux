@@ -201,7 +201,7 @@ func sendTrafficUpdates() {
 			logTraffic(ti) // only add to the SQLite log if it's not stale
 
 			if ti.Icao_addr == uint32(code) { //
-				log.Printf("Ownship target detected for code %X\n", code) // DEBUG - REMOVE
+				//log.Printf("Ownship target detected for code %X\n", code) // DEBUG - REMOVE
 				OwnshipTrafficInfo = ti
 			} else {
 				msg = append(msg, makeTrafficReportMsg(ti)...)
