@@ -371,8 +371,6 @@ func getCount(sql string, db *sql.DB) (count int64) {
 */
 func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http.Request) {
 	
-	fmt.Println("about to do flights")
-	
 	db, err := openDatabase()
 	if (err != nil) {
     	http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -389,14 +387,10 @@ func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http
 		}
 	}
 	
-	fmt.Println("About to query count")
-	
 	var count int64 
 	count = getCount("SELECT COUNT(*) FROM startup WHERE duration > 0 AND distance > 0;", db)
 	
-	fmt.Println("About to query data")
-	
-	sql := fmt.Sprintf("SELECT * FROM startup WHERE duration > 0 AND distance > 0 ORDER BY id DESC LIMIT 100 OFFSET %d;", offset);
+	sql := fmt.Sprintf("SELECT * FROM startup WHERE duration > 0 AND distance > 0 AND (max_alt - start_alt > 350) ORDER BY id DESC LIMIT 100 OFFSET %d;", offset);
     m, err := gosqljson.QueryDbToMapJSON(db, "any", sql)
     if err != nil {
     	http.Error(w, err.Error(), http.StatusBadRequest)
@@ -404,7 +398,6 @@ func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http
     }
 
 	ret := fmt.Sprintf("{\"count\": %d, \"limit\": 100, \"offset\": %d, \"data\": %s}", count, offset, m)
-	fmt.Printf(ret)
 	
 	setNoCache(w)
 	setJSONHeaders(w)
@@ -719,7 +712,6 @@ func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
 	// /replay/stop (cancel current playback)
 	// /replay/jump/392952 (jump to timestamp 392952 and play)
 	// /replay/status (returns the current status and, if playing, timestamp)
-	fmt.Printf("Entered handleReplayREquest\n")
 	
 	path := strings.Split(r.URL.String(), "/")
 	
@@ -767,7 +759,7 @@ func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		abortReplay = false
-		go replayFlightLog(flight, speed)
+		replayFlightLog(flight, speed)
 		ret = fmt.Sprintf("{\"status\": \"playing\"}")
 	}
 	

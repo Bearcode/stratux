@@ -697,6 +697,7 @@ type FlightLog struct {
 	start_tz string
 	start_lat float64
 	start_lng float64
+	start_alt float32
 	
 	end_airport_id string
 	end_airport_name string
@@ -706,6 +707,7 @@ type FlightLog struct {
 	end_lat float64
 	end_lng float64
 	
+	max_alt float32
 	duration int64
 	distance float64
 	groundspeed int64
@@ -956,13 +958,15 @@ func updateFlightLog(db *sql.DB) {
 	sql = sql + "start_tz = ?,\n"
 	sql = sql + "start_lat = ?,\n"
 	sql = sql + "start_lng = ?,\n"
+	sql = sql + "start_alt = ?,\n"
 	sql = sql + "end_airport_id = ?,\n"
 	sql = sql + "end_airport_name = ?,\n"
 	sql = sql + "end_timestamp = ?,\n"
 	sql = sql + "end_localtime = ?,\n"
 	sql = sql + "end_tz = ?,\n"
 	sql = sql + "end_lat = ?,\n"
-	sql = sql + "end_lng = ?,\n"	
+	sql = sql + "end_lng = ?,\n"
+	sql = sql + "max_alt = ?,\n"
 	sql = sql + "duration = ?,\n"
 	sql = sql + "distance = ?,\n"
 	sql = sql + "groundspeed = ?,\n"
@@ -997,6 +1001,8 @@ func startFlightLog() {
 	// gps coordinates at startup
 	flightlog.start_lat = float64(mySituation.Lat)
 	flightlog.start_lng = float64(mySituation.Lng)
+	flightlog.start_alt = mySituation.Alt
+	flightlog.max_alt = mySituation.Alt
 	
 	// time, timezone, localtime
 	flightlog.start_timestamp = (stratuxClock.RealTime.UnixNano() / 1000000)
@@ -1150,8 +1156,6 @@ func logSituation() {
 		}
 		
 		
-		// look for at least
-		
 		// look for a transition
 		if (flightState != flightState0) {
 		
@@ -1207,12 +1211,16 @@ func logSituation() {
 			}
 		}
 		
+		// update altitude value - used for determining "real" flights vs non-flight startups
+		if (mySituation.Alt > flightlog.max_alt) {
+			flightlog.max_alt = mySituation.Alt
+		}
 		
 		// if log level is anything less than DEMO (3), we want to limit the update frequency
 		if globalSettings.FlightLogLevel < FLIGHT_LOG_LEVEL_DEMO {
 			now := stratuxClock.Milliseconds
 			msd := (now - lastSituationLogMs)
-			
+		
 			// logbook is 30 seconds (30,000 ms)
 			if (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_LOGBOOK) && (msd < 30000) {
 				return;
@@ -1237,6 +1245,11 @@ func logSituation() {
 				flightlog.distance = flightlog.distance + (segment * NM_PER_KM)
 			}
 			lastPoint = p;
+		}
+		
+		// update the current startup record in the database every 60 seconds
+		if (flightlog.duration % 60) == 0 {
+			dataUpdateChan <- true
 		}
 		
 		lastSituationLogMs = stratuxClock.Milliseconds

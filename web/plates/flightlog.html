@@ -1,73 +1,35 @@
 <div class="col-sm-12">
-	<div class="text-center">
-		<p><strong>Version: <span>{{Version}} ({{Build}})</span></strong></p>
-	</div>
 	<div class="panel panel-default">
-		<div class="panel-heading" ng-class="{'section_invisible': !visible_errors}">
-			<span class="panel_label">Errors</span>
-		</div>
-		<div class="panel-body" ng-class="{'section_invisible': !visible_errors}">
-			<ul>
-				<li class="status-error" ng-repeat="err in Errors">
-					<span class="fa fa-exclamation-triangle icon-red"></span> <span class="icon-red">{{err}}</span>
-				</li>
-			</ul>
-		</div>
 		<div class="panel-heading">
-			<span class="panel_label">Status</span>
+			<span class="panel_label">Flight Log</span>
 			<span ng-show="ConnectState == 'Connected'" class="label label-success">{{ConnectState}}</span>
 			<span ng-hide="ConnectState == 'Connected'" class="label label-danger">{{ConnectState}}</span>
+			<span ng-hide="ReplayMode == false" class="label label-primary">SIMULATION MODE</span>
 		</div>
 		<div class="panel-body">
 			<div class="row">
-				<div class="col-sm-6">
-					<span class="col-xs-3" ng-hide="showReg"><strong>Flight Log</strong></span>
-				</div>
-			</div>
-			<div class="separator"></div>
-			<div class="row">
-				<div class="col-sm-12">
-					<span class="col-xs-1" ng-hide="showReg"><strong>Date</strong></span>
+				<div class="col-lg-12">
+					<span class="col-xs-2" ng-hide="showReg"><strong>Date</strong></span>
+					<span class="col-xs-1" ng-hide="showReg"><strong>Time (Z)</strong></span>
 					<span class="col-xs-1" ng-hide="showReg"><strong>Start</strong></span>
 					<span class="col-xs-1" ng-hide="showReg"><strong>End</strong></span>
 					<span class="col-xs-1" ng-hide="showReg"><strong>Duration</strong></span>
 					<span class="col-xs-1" ng-hide="showReg"><strong>Distance</strong></span>
-					<span class="col-xs-1" ng-hide="showReg"><strong>Route</strong></span>
+					<span class="col-xs-5" ng-hide="showReg"><strong>Actions</strong></span>
 				</div>
 			</div>
 			
-			<div class="row" ng-repeat="aircraft in data_list | orderBy: 'dist'">
+			<div class="row" ng-repeat="flight in data_list | orderBy: 'dist'">
 				<div class="separator"></div>
-				<div class="col-sm-6">
-					<span class="col-xs-3" ng-hide="showReg">
-						<span ng-show="aircraft.tail" ng-class="'label traffic-style'+aircraft.src+aircraft.targettype">{{aircraft.addr_symb}}<strong>&nbsp;{{aircraft.tail}}</strong></span>
-						<span ng-hide="aircraft.tail" ng-class="'label traffic-style'+aircraft.src+aircraft.targettype">{{aircraft.addr_symb}}<strong>&nbsp;[--N/A--]</strong></span>
-					</span>					
-					<span class="col-xs-3" ng-show="showReg">
-						<span ng-show="aircraft.reg" ng-class="'label traffic-style'+aircraft.src+aircraft.targettype">{{aircraft.addr_symb}}<strong>&nbsp;{{aircraft.reg}}</strong></span>
-						<span ng-hide="aircraft.reg" ng-class="'label traffic-style'+aircraft.src+aircraft.targettype">{{aircraft.addr_symb}}<strong>&nbsp;[--N/A--]</strong></span>
-					</span>
-
-					<span class="col-xs-2">
-						<span style="font-size:80%" ng-hide="showSquawk">{{aircraft.icao}}<span style="font-size:50%">{{aircraft.addr_type == 3 ? "&nbsp;(TFID)" : ""}}</span></span>
-						<span ng-show="showSquawk"><span ng-show="aircraft.squawk < 1000">0</span><span ng-show="aircraft.squawk < 100">0</span><span ng-show="aircraft.squawk < 10">0</span>{{aircraft.squawk}}</span>
-					</span>
-					<span class="col-xs-5 text-right" ng-hide="GPS_connected && RelDist">{{aircraft.lat}} {{aircraft.lon}}</span>
-					<span class="col-xs-3 text-right" ng-show="GPS_connected && RelDist">{{aircraft.dist.toFixed(1)}}<span style="font-size:50%">NM</span></span>
-					<span class="col-xs-2 text-right" ng-show="GPS_connected && RelDist">{{aircraft.bearing}}&deg;</span>
-
-				</div>
-				<div class="col-sm-6">
-					<span class="col-xs-3 text-right">{{aircraft.alt}}</span>
-					<span class="col-xs-1 small col-padding-shift-right text-muted">
-						<span ng-show="aircraft.vspeed > 0"><span class="fa fa-ascent"></span>{{aircraft.vspeed}}</span>
-						<span ng-show="aircraft.vspeed < 0"><span class="fa fa-descent"></span>{{0-aircraft.vspeed}}</span>
-					</span>
-					<span class="col-xs-2 text-right">{{aircraft.speed}}<span style="font-size:50%">KTS</span></span>
-					<span class="col-xs-2 text-right"><span ng-show="aircraft.heading < 10">0</span><span ng-show="aircraft.heading < 100">0</span>{{aircraft.heading}}&deg;</span>				
-					<span class="col-xs-2 text-right">{{aircraft.signal.toFixed(2)}}<span style="font-size:50%">dB</span></span>
-					<span class="col-xs-2 text-right">{{aircraft.age.toFixed(1)}}<span style="font-size:50%">s</span></span>
-				</div>
+				<div class="col-lg-12">
+					<span class="col-xs-2" ng-hide="showReg">{{flight.date}}</span>
+					<span class="col-xs-1" ng-hide="showReg">{{flight.time}}</span>
+					<span class="col-xs-1" ng-hide="showReg">{{flight.start_airport_id}}</span>
+					<span class="col-xs-1" ng-hide="showReg">{{flight.end_airport_id}}</span>
+					<span class="col-xs-1" ng-hide="showReg">{{flight.hms}}</span>
+					<span class="col-xs-1" ng-hide="showReg">{{flight.distance}}</span>
+					<span class="col-xs-5" ng-hide="showReg"><button ng-click="replayFlight(flight.id)">Replay</button></span>
+				</div>			
 			</div>
 		</div>
 	</div>

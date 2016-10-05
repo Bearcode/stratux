@@ -1,11 +1,62 @@
 angular.module('appControllers').controller('FlightlogCtrl', FlightlogCtrl); // get the main module contollers set
-StatusCtrl.$inject = ['$rootScope', '$scope', '$state', '$http', '$interval']; // Inject my dependencies
+StatusCtrl.$inject = ['$rootScope', '$scope', '$state', '$http', '$interval',  '$location', '$window']; // Inject my dependencies
 
 // create our controller function with all necessary logic
-function FlightlogCtrl($rootScope, $scope, $state, $http, $interval) {
+function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $interval) {
 
 	$scope.$parent.helppage = 'plates/flightlog-help.html';
+	$scope.data_list = [];
+	
+	$scope.replayFlight = function (id) {
+		$window.location.href = "/";
+		$location.path('/home');
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/" + id + "/5"
+		$http.post(replayUrl).
+		then(function (response) {
+			// do nothing
+			// $scope.$apply();
+		}, function (response) {
+			// do nothing
+		});
+	};
+	
+	function utcTimeString(epoc) {
+		var time = "";
+		var val;
+		var d = new Date(epoc);
+		val = d.getUTCHours();
+		time += (val < 10 ? "0" + val : "" + val);
+		val = d.getUTCMinutes();
+		time += ":" + (val < 10 ? "0" + val : "" + val);
+		val = d.getUTCSeconds();
+		time += ":" + (val < 10 ? "0" + val : "" + val);
+		time += "Z";
+		return time;
+	}
+	
+	function secondsToHms(d) {
+		d = Number(d);
+		var h = Math.floor(d / 3600);
+		var m = Math.floor(d % 3600 / 60);
+		var s = Math.floor(d % 3600 % 60);
+		return ((h > 0 ? h + ":" + (m < 10 ? "0" : "") : "") + m + ":" + (s < 10 ? "0" : "") + s); 
+	}
 
+	function getShortDate(m) {
+		var sd = ("0" + (m.getUTCMonth()+1)).slice(-2) +"-"+
+			("0" + m.getUTCDate()).slice(-2) +"-"+
+			m.getUTCFullYear()
+		return sd;
+	}
+	
+	function getShortTime(m) {
+		var st =
+			("0" + m.getUTCHours()).slice(-2) + ":" +
+			("0" + m.getUTCMinutes()).slice(-2) + ":" +
+			("0" + m.getUTCSeconds()).slice(-2);
+		return st;
+	}
+	
 	function connect($scope) {
 		if (($scope === undefined) || ($scope === null))
 			return; // we are getting called once after clicking away from the status page
@@ -37,58 +88,18 @@ function FlightlogCtrl($rootScope, $scope, $state, $http, $interval) {
 		};
 
 		socket.onmessage = function (msg) {
-			console.log('Received status update.')
+			//console.log('Received status update.')
 
 			var status = JSON.parse(msg.data)
 			// Update Status
 			$scope.Version = status.Version;
 			$scope.Build = status.Build.substr(0, 10);
-			$scope.Devices = status.Devices;
-			$scope.Ping_connected = status.Ping_connected;
-			$scope.Connected_Users = status.Connected_Users;
-			$scope.UAT_messages_last_minute = status.UAT_messages_last_minute;
-			$scope.UAT_messages_max = status.UAT_messages_max;
-			$scope.ES_messages_last_minute = status.ES_messages_last_minute;
-			$scope.ES_messages_max = status.ES_messages_max;
-			$scope.GPS_satellites_locked = status.GPS_satellites_locked;
-			$scope.GPS_satellites_tracked = status.GPS_satellites_tracked;
-			$scope.GPS_satellites_seen = status.GPS_satellites_seen;
-			$scope.GPS_solution = status.GPS_solution;
-			$scope.GPS_position_accuracy = String(status.GPS_solution ? ", " + status.GPS_position_accuracy.toFixed(1) : "");
-			$scope.RY835AI_connected = status.RY835AI_connected;
-			$scope.UAT_METAR_total = status.UAT_METAR_total;
-			$scope.UAT_TAF_total = status.UAT_TAF_total;
-			$scope.UAT_NEXRAD_total = status.UAT_NEXRAD_total;
-			$scope.UAT_SIGMET_total = status.UAT_SIGMET_total;
-			$scope.UAT_PIREP_total = status.UAT_PIREP_total;
-			$scope.UAT_NOTAM_total = status.UAT_NOTAM_total;
-			$scope.UAT_OTHER_total = status.UAT_OTHER_total;
-			// Errors array.
-			if (status.Errors.length > 0) {
-				$scope.visible_errors = true;
-				$scope.Errors = status.Errors;
-			}
-
-			var uptime = status.Uptime;
-			if (uptime != undefined) {
-				var up_d = parseInt((uptime/1000) / 86400),
-				    up_h = parseInt((uptime/1000 - 86400*up_d) / 3600),
-				    up_m = parseInt((uptime/1000 - 86400*up_d - 3600*up_h) / 60),
-				    up_s = parseInt((uptime/1000 - 86400*up_d - 3600*up_h - 60*up_m));
-				$scope.Uptime = String(up_d + "/" + ((up_h < 10) ? "0" + up_h : up_h) + ":" + ((up_m < 10) ? "0" + up_m : up_m) + ":" + ((up_s < 10) ? "0" + up_s : up_s));
-			} else {
-				// $('#Uptime').text('unavailable');
-			}
-			var boardtemp = status.CPUTemp;
-			if (boardtemp != undefined) {
-				/* boardtemp is celcius to tenths */
-				$scope.CPUTemp = String(boardtemp.toFixed(1) + 'C / ' + ((boardtemp * 9 / 5) + 32.0).toFixed(1) + 'F');
-			} else {
-				// $('#CPUTemp').text('unavailable');
-			}
+			$scope.ReplayMode = status.ReplayMode;
 
 			$scope.$apply(); // trigger any needed refreshing of data
 		};
+		
+		getFlights();
 	}
 
 	function setHardwareVisibility() {
@@ -115,20 +126,26 @@ function FlightlogCtrl($rootScope, $scope, $state, $http, $interval) {
 		});
 	};
 
-	function getTowers() {
+	function getFlights() {
 		// Simple GET request example (note: responce is asynchronous)
 		$http.get("/flightlog/flights").
 		then(function (response) {
-			var towers = angular.fromJson(response.data);
-			console.dir(towers);
-			var cnt = 0;
-			for (var key in towers) {
-				if (towers[key].Messages_last_minute > 0) {
-					cnt++;
-				}
+			var data = angular.fromJson(response.data);
+			var flights = data.data;
+			var cnt = data.count;
+			
+			for (var i = 0; i < cnt; i++) {
+				flight = flights[i];
+				var m = new Date(parseInt(flight.start_timestamp));				  
+				flight.date = getShortDate(m);
+				flight.time = getShortTime(m);
+				flight.distance = Math.round(parseFloat(flight.distance), 2);
+				flight.hms = secondsToHms(flight.duration);
+				console.dir(flight);
 			}
-			$scope.UAT_Towers = cnt;
-			// $scope.$apply();
+			$scope.data_list = flights;
+			//$scope.UAT_Towers = cnt;
+			//$scope.$apply();
 		}, function (response) {
 			$scope.raw_data = "error getting tower data";
 		});
@@ -137,7 +154,7 @@ function FlightlogCtrl($rootScope, $scope, $state, $http, $interval) {
 	// periodically get the tower list
 	var updateTowers = $interval(function () {
 		// refresh tower count once each 5 seconds (aka polling)
-		getTowers();
+		//getTowers();
 	}, (5 * 1000), 0, false);
 
 
