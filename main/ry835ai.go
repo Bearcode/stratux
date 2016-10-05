@@ -1322,17 +1322,20 @@ func gpsSerialReader() {
 
 	i := 0 //debug monitor
 	scanner := bufio.NewScanner(serialPort)
-	for scanner.Scan() && globalStatus.GPS_connected && globalSettings.GPS_Enabled && (globalStatus.ReplayMode == false) {
+	for scanner.Scan() && globalStatus.GPS_connected && globalSettings.GPS_Enabled {
 		i++
 		if globalSettings.DEBUG && i%100 == 0 {
 			log.Printf("gpsSerialReader() scanner loop iteration i=%d\n", i) // debug monitor
 		}
 
 		s := scanner.Text()
-
-		if !processNMEALine(s) {
-			if globalSettings.DEBUG {
-				fmt.Printf("processNMEALine() exited early -- %s\n", s)
+		
+		// process the incoming data unless we are currently in Replay mode
+		if (globalStatus.ReplayMode == false) {
+			if !processNMEALine(s) {
+				if globalSettings.DEBUG {
+					fmt.Printf("processNMEALine() exited early -- %s\n", s)
+				}
 			}
 		}
 	}
