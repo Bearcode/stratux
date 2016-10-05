@@ -711,6 +711,7 @@ func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
 	// /replay/stop (cancel current playback)
 	// /replay/jump/392952 (jump to timestamp 392952 and play)
 	// /replay/status (returns the current status and, if playing, timestamp)
+	fmt.Printf("Entered handleReplayREquest\n")
 	
 	path := strings.Split(r.URL.String(), "/")
 	
@@ -758,7 +759,7 @@ func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		abortReplay = false
-		replayFlightLog(flight, speed)
+		go replayFlightLog(flight, speed)
 		ret = fmt.Sprintf("{\"status\": \"playing\"}")
 	}
 	

@@ -17,6 +17,7 @@
 			<span class="panel_label">Status</span>
 			<span ng-show="ConnectState == 'Connected'" class="label label-success">{{ConnectState}}</span>
 			<span ng-hide="ConnectState == 'Connected'" class="label label-danger">{{ConnectState}}</span>
+			<span ng-hide="ReplayMode == true" class="label label-primary">SIMULATION MODE</span>
 		</div>
 		<div class="panel-body">
 			<div class="form-horizontal">
