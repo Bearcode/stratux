@@ -382,22 +382,24 @@ func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http
 	if (len(args) > 0) {
 		offset, err = strconv.Atoi(args[0])
 		if (err != nil) {
-			http.Error(w, "Invalid flight ID value", http.StatusBadRequest)
+			http.Error(w, "Invalid page value", http.StatusBadRequest)
 			return
 		}
+		// page size is 10 records
+		offset = (offset - 1) * 10
 	}
 	
 	var count int64 
 	count = getCount("SELECT COUNT(*) FROM startup WHERE duration > 1 AND distance > 1 AND ((max_alt - start_alt) > 350);", db)
 	
-	sql := fmt.Sprintf("SELECT * FROM startup WHERE duration > 1 AND distance > 1 AND ((max_alt - start_alt) > 350) ORDER BY id DESC LIMIT 100 OFFSET %d;", offset);
+	sql := fmt.Sprintf("SELECT * FROM startup WHERE duration > 1 AND distance > 1 AND ((max_alt - start_alt) > 350) ORDER BY id DESC LIMIT 10 OFFSET %d;", offset);
     m, err := gosqljson.QueryDbToMapJSON(db, "any", sql)
     if err != nil {
     	http.Error(w, err.Error(), http.StatusBadRequest)
     	return
     }
 
-	ret := fmt.Sprintf("{\"count\": %d, \"limit\": 100, \"offset\": %d, \"data\": %s}", count, offset, m)
+	ret := fmt.Sprintf("{\"count\": %d, \"limit\": 10, \"offset\": %d, \"data\": %s}", count, offset, m)
 	
 	setNoCache(w)
 	setJSONHeaders(w)
@@ -714,11 +716,136 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 	return
 }
 
-func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
-	
+func handleFlightLogReplayPlay(args []string, w http.ResponseWriter, r *http.Request) {
+
 	var flight int64 = 0
 	var speed int64 = 1
+
+	// next parameter is the flight ID. Use 0 to stop current playback
+	flight, err := strconv.ParseInt(args[0], 10, 64)
+	if err != nil {
+		http.Error(w, "Error getting flight id from Play request.", http.StatusBadRequest)
+		return
+	}
 	
+	if len(args) > 1 {
+		speed, err = strconv.ParseInt(args[1], 10, 64)
+		if (err != nil) {
+			http.Error(w, "Error getting speed from Play request.", http.StatusBadRequest)
+			return
+		}
+	}
+	
+	var ret string
+	if (flight == 0) {
+		if (!globalStatus.ReplayMode) {
+			http.Error(w, "Cannot cancel replay - no replay active.", http.StatusBadRequest)
+			return
+		} else {
+			abortReplay = true
+		}
+	} else {
+		abortReplay = false
+		go replayFlightLog(flight, speed, 0)
+		ret = fmt.Sprintf("{\"status\": \"playing\", \"speed\": %d, \"flight\": %d}", speed, flight)
+	}
+	
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "%s\n", ret)
+
+}
+
+func handleFlightLogReplayPause(args []string, w http.ResponseWriter, r *http.Request) {
+
+	if (globalStatus.ReplayMode == false) {
+		http.Error(w, "Cannot pause replay - no replay active.", http.StatusBadRequest)
+		return
+	}
+	
+	pauseReplay = true
+	
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "{\"status\": \"paused\"}\n")
+	
+}
+
+func handleFlightLogReplayResume(args []string, w http.ResponseWriter, r *http.Request) {
+
+	if (globalStatus.ReplayMode == false) {
+		http.Error(w, "Cannot pause replay - no replay active.", http.StatusBadRequest)
+		return
+	}
+	
+	pauseReplay = false
+	
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "{\"status\": \"playing\"}\n")
+	
+}
+
+func handleFlightLogReplaySpeed(args []string, w http.ResponseWriter, r *http.Request) {
+	
+	if (globalStatus.ReplayMode == false) {
+		http.Error(w, "Cannot pause replay - no replay active.", http.StatusBadRequest)
+		return
+	}
+	
+	if len(args) < 1 {
+		http.Error(w, "Error getting speed from Speed request.", http.StatusBadRequest)
+		return
+	}
+		
+	speed, err := strconv.ParseInt(args[2], 10, 64)
+	if (err != nil) {
+		http.Error(w, "Error getting speed from Play request.", http.StatusBadRequest)
+		return
+	}
+
+	replaySpeed = speed
+	
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "{\"status\": \"playing\", \"speed\": %d}\n", speed)
+	
+}
+
+func handleFlightLogReplayStop(args []string, w http.ResponseWriter, r *http.Request) {
+
+	if (globalStatus.ReplayMode == false) {
+		http.Error(w, "Cannot cancel replay - no replay active.", http.StatusBadRequest)
+		return
+	}
+	
+	abortReplay = true
+	
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "{\"status\": \"stopping\"}\n")
+
+}
+
+func handleFlightLogReplayJump(args []string, w http.ResponseWriter, r *http.Request) {
+
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "{\"status\": \"jumping\"}\n")
+	
+}
+
+func handleFlightLogReplayStatus(args []string, w http.ResponseWriter, r *http.Request) {
+
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "{\"status\": \"happy!\"}\n")
+	
+}
+
+
+func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
+		
 	// /replay/play/12/5/1 (replay flight 12 on a loop)
 	// /replay/pause (stop at current timestamp - returns current timestamp)
 	// /replay/resume (resume playing after pause)
@@ -741,45 +868,27 @@ func handleReplayRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	// commands are "play" "abort" "index"
 	command := path[2]
-	fmt.Printf("Command: %s\n", command)
-//TODO - add command processor
+	arguments := path[3:]
 	
-	// next parameter is the flight ID. Use 0 to stop current playback
-	flight, err := strconv.ParseInt(path[2], 10, 64)
-	if err != nil {
-		fmt.Printf("Error getting flight id from request string: %s\n", err.Error())
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	switch command {
+	case "play":
+		handleFlightLogReplayPlay(arguments, w, r)
+	case "pause":
+		handleFlightLogReplayPause(arguments, w, r)
+	case "resume":
+		handleFlightLogReplayResume(arguments, w, r)
+	case "speed":
+		handleFlightLogReplaySpeed(arguments, w, r)
+	case "stop":
+		handleFlightLogReplayStop(arguments, w, r)
+	case "jump":
+		handleFlightLogReplayJump(arguments, w, r)
+	case "status":
+		handleFlightLogReplayStatus(arguments, w, r)
+	default:
+		http.Error(w, "Error - invalid FlightLog command.", http.StatusBadRequest)
 	}
-	
-	if len(path) > 3 {
-		speed, err = strconv.ParseInt(path[3], 10, 64)
-		if (err != nil) {
-			fmt.Printf("Error getting speed from request string: %s\n", err.Error())
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
-	}
-	
-	var ret string
-	if (flight == 0) {
-		if (!globalStatus.ReplayMode) {
-			http.Error(w, "Cannot cancel replay - no replay active.", http.StatusBadRequest)
-			return
-		} else {
-			abortReplay = true
-		}
-	} else {
-		abortReplay = false
-		replayFlightLog(flight, speed)
-		ret = fmt.Sprintf("{\"status\": \"playing\"}")
-	}
-	
-	setNoCache(w)
-	setJSONHeaders(w)
-	fmt.Fprintf(w, "%s\n", ret)
 }
 
 func delayReboot() {

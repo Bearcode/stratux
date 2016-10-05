@@ -720,17 +720,21 @@ var flightlog FlightLog
 /*
 	replayFlightLog(flight int): replay a flight at a given speed
 */
+var replaySpeed int64 = 1
+var pauseReplay bool
 var abortReplay bool
 var uatReplayComplete bool
 var esReplayComplete bool
 var situationReplayComplete bool
 
-func replayUAT(flight int64, speed int64, db *sql.DB) {
+func replayUAT(flight int64, db *sql.DB, timestamp int64) {
 	
 	var ts1, ts2 int64
 	var data string
 	
-	sql := fmt.Sprintf("SELECT timestamp_id, data FROM messages WHERE startup_id = %d ORDER BY timestamp_id ASC;", flight)
+	uatReplayComplete = false
+	
+	sql := fmt.Sprintf("SELECT timestamp_id, data FROM messages WHERE startup_id = %d AND timestamp_id > %d ORDER BY timestamp_id ASC;", flight, timestamp)
 	rows, err := db.Query(sql)
 	if err != nil {
 		fmt.Printf("Error querying messages: %s\n", err.Error())
@@ -766,8 +770,15 @@ func replayUAT(flight int64, speed int64, db *sql.DB) {
 		}
 		
 		// wait for the appropriate number of ms
+		var counter int64 = 0
 		delta := (ts2 - ts1)
-		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
+		for {
+			time.Sleep(1 * time.Millisecond)
+			counter++
+			if abortReplay || (counter >= (delta / replaySpeed)) {
+				break;
+			}
+		}
 		ts1 = ts2
 		ts2 = 0
 		
@@ -788,12 +799,14 @@ func replayUAT(flight int64, speed int64, db *sql.DB) {
 	uatReplayComplete = true
 }
 
-func replay1090(flight int64, speed int64, db *sql.DB) {
+func replay1090(flight int64, db *sql.DB, timestamp int64) {
 	
 	var ts1, ts2 int64
 	var data string
 	
-	sql := fmt.Sprintf("SELECT timestamp_id, data FROM es_messages WHERE startup_id = %d ORDER BY timestamp_id ASC;", flight)
+	esReplayComplete = false
+	
+	sql := fmt.Sprintf("SELECT timestamp_id, data FROM es_messages WHERE startup_id = %d AND timestamp_id > %d ORDER BY timestamp_id ASC;", flight, timestamp)
 	rows, err := db.Query(sql)
 	if err != nil {
 		return
@@ -822,9 +835,16 @@ func replay1090(flight int64, speed int64, db *sql.DB) {
 			}
 		} 
 		
-		// wait for the appropriate timeout
+		// wait for the appropriate number of ms
+		var counter int64 = 0
 		delta := (ts2 - ts1)
-		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
+		for {
+			time.Sleep(1 * time.Millisecond)
+			counter++
+			if abortReplay || (counter >= (delta / replaySpeed)) {
+				break;
+			}
+		}
 		ts1 = ts2
 		ts2 = 0
 		
@@ -854,13 +874,15 @@ func replay1090(flight int64, speed int64, db *sql.DB) {
 	going to pull the stuff we need to create ownship and ownshipGeometricAltitude 
 	GDL-90 messages.
 */
-func replaySituation(flight int64, speed int64, db *sql.DB) {
+func replaySituation(flight int64, db *sql.DB, timestamp int64) {
 	
 	var ts1, ts2 int64
 	
+	situationReplayComplete = false
+	
 	fields := "Lat, Lng, Pressure_alt, Alt, NACp, GroundSpeed, TrueCourse, timestamp_id"
 
-	sql := fmt.Sprintf("SELECT %s FROM mySituation WHERE startup_id = %d ORDER BY timestamp_id ASC;", fields, flight)
+	sql := fmt.Sprintf("SELECT %s FROM mySituation WHERE startup_id = %d AND timestamp_id > %d ORDER BY timestamp_id ASC;", fields, flight, timestamp)
 	rows, err := db.Query(sql)
 	if err != nil {
 		fmt.Println("Error selecting data for replay of mySituation\n")
@@ -886,9 +908,16 @@ func replaySituation(flight int64, speed int64, db *sql.DB) {
 			}
 		} 
 		
-		// wait for the next message
+		// wait for the appropriate number of ms
+		var counter int64 = 0
 		delta := (ts2 - ts1)
-		time.Sleep(time.Duration(delta / speed) * time.Millisecond)
+		for {
+			time.Sleep(1 * time.Millisecond)
+			counter++
+			if abortReplay || (counter >= (delta / replaySpeed)) {
+				break;
+			}
+		}
 		ts1 = ts2
 		ts2 = 0
 
@@ -907,11 +936,12 @@ func replaySituation(flight int64, speed int64, db *sql.DB) {
 	situationReplayComplete = true
 }
 
-func replayFlightLog(flight int64, speed int64) {
+func replayFlightLog(flight int64, speed int64, timestamp int64) {
 	
 	fmt.Printf("Starting reply of flight %d at speed %d.\n", flight, speed)
 	
 	// initialize replay mode 
+	replaySpeed = speed
 	globalStatus.ReplayMode = true
 	
 	// open another connection to the database
@@ -922,12 +952,12 @@ func replayFlightLog(flight int64, speed int64) {
 
 	defer db.Close()
 	
-	go replayUAT(flight, speed, db)
-	go replay1090(flight, speed, db)
-	go replaySituation(flight, speed, db)
+	go replayUAT(flight, db, timestamp)
+	go replay1090(flight, db, timestamp)
+	go replaySituation(flight, db, timestamp)
 	
 	for {
-		time.Sleep(1 * time.Second)
+		time.Sleep(50 * time.Millisecond)
 		if uatReplayComplete && esReplayComplete && situationReplayComplete {
 			break
 		}
@@ -938,6 +968,7 @@ func replayFlightLog(flight int64, speed int64) {
 	fmt.Println("Completed playback of replay log.")
 	
 }
+
 
 /*
 	updateFlightLog(): updates the SQLite record for the current startup to indicate

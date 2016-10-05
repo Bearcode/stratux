@@ -50,8 +50,8 @@
 				</div>
 				<div class="col-sm-3">
 					<label class="control-label col-xs-6">Replay Controls</label>
-					<button style="margin-top:5px;" ng-disabled="ReplayMode == false" ng-click="replayFlight(flight.id)">Pause</button>
-					<button style="margin-top:5px;" ng-disabled="ReplayMode == false" ng-click="replayFlight(flight.id)">Stop</button>
+					<button style="margin-top:5px;" ng-disabled="ReplayMode == false" ng-click="pauseReplay()">Pause</button>
+					<button style="margin-top:5px;" ng-disabled="ReplayMode == false" ng-click="stopReplay()">Stop</button>
 				</div>
 				<!--
 				<div class="col-sm-4">
@@ -89,7 +89,7 @@
 					<span class="col-xs-1" ng-hide="showReg">{{event.timeLocal}}</span>
 					<span class="col-xs-1" ng-hide="showReg">{{event.timeZulu}}</span>
 					<span class="col-xs-4" ng-hide="showReg">
-						<button ng-hide="ReplayMode == false" ng-click="jumpToTimestamp(event.timestamp)">Jump</button>&nbsp;
+						<button ng-hide="ReplayMode == false" ng-click="jumpToTimestamp(event.timestamp, event.flight)">Jump</button>&nbsp;
 					</span>
 				</div>
 			</div>

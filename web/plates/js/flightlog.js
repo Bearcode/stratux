@@ -17,25 +17,44 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
   
 	$scope.$watch('playbackSpeed', function(newValue){
   		// send the new playback speed to the controller if a playback is active
+  		if ($scope.ReplayMode) {
+  			//
+  		}
 	});
 	
 	$scope.replayFlight = function (id) {
-		var replayUrl = "http://" + URL_HOST_BASE + "/replay/" + id + "/5";
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/play/" + id + "/" + $scope.playbackSpeed;
 		$http.post(replayUrl).
 		then(function (response) {
-			$scope.GetDetails(id);
+			$scope.CurrentFlight = id;
+			getEvents(id);
 		}, function (response) {
 			// do nothing
 		});
 	};
 	
-	$scope.getDetails = function(id) {
-		$scope.CurrentFlight = id;
-		getEvents(id);
+	$scope.pauseReplay = function() {
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/pause";
+		$http.post(replayUrl).
+		then(function (response) {
+			// do nothing
+		}, function (response) {
+			// do nothing
+		});
 	}
 	
-	$scope.jumpToTimestamp = function(ts) {
-		var replayUrl = "http://" + URL_HOST_BASE + "/replay/jump/" + ts;
+	$scope.stopReplay = function() {
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/stop";
+		$http.post(replayUrl).
+		then(function (response) {
+			// do nothing
+		}, function (response) {
+			// do nothing
+		});
+	}
+	
+	$scope.jumpToTimestamp = function(ts, flight) {
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/jump/" + flight + "/" + ts;
 		$http.post(replayUrl).
 		then(function (response) {
 			// do nothing
@@ -43,6 +62,11 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 		}, function (response) {
 			// do nothing
 		});
+	}
+	
+	$scope.getDetails = function(id) {
+		$scope.CurrentFlight = id;
+		getEvents(id);
 	}
 	
 	function utcTimeString(epoc) {
