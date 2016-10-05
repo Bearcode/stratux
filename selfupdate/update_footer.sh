@@ -26,6 +26,9 @@ ln -fs /lib/systemd/system/stratux.service /etc/systemd/system/multi-user.target
 #WiFi Config Manager
 cp -f hostapd_manager.sh /usr/sbin/
 
+#SDR Serial Script
+cp -f sdr-tool.sh /usr/sbin/
+
 #boot config
 cp -f config.txt /boot/config.txt
 
