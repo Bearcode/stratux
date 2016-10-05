@@ -62,6 +62,12 @@ app.config(function ($stateProvider, $urlRouterProvider) {
 			templateUrl: 'plates/settings.html',
 			controller: 'SettingsCtrl',
 			reloadOnSearch: false
+		})
+		.state('flightlog', {
+			url: '/flightlog',
+			templateUrl: 'plates/flightlog.html',
+			controller: 'FlightlogCtrl',
+			reloadOnSearch: false
 		});
 	$urlRouterProvider.otherwise('/');
 });

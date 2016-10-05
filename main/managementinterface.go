@@ -371,6 +371,8 @@ func getCount(sql string, db *sql.DB) (count int64) {
 */
 func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http.Request) {
 	
+	fmt.Println("about to do flights")
+	
 	db, err := openDatabase()
 	if (err != nil) {
     	http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -387,8 +389,12 @@ func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http
 		}
 	}
 	
+	fmt.Println("About to query count")
+	
 	var count int64 
 	count = getCount("SELECT COUNT(*) FROM startup WHERE duration > 0 AND distance > 0;", db)
+	
+	fmt.Println("About to query data")
 	
 	sql := fmt.Sprintf("SELECT * FROM startup WHERE duration > 0 AND distance > 0 ORDER BY id DESC LIMIT 100 OFFSET %d;", offset);
     m, err := gosqljson.QueryDbToMapJSON(db, "any", sql)
@@ -397,7 +403,9 @@ func handleFlightLogFlightsRequest(args []string, w http.ResponseWriter, r *http
     	return
     }
 
-	ret := fmt.Sprintf("{\"count\": %d, \"limit\": 100, \"offset\": %s, \"data\": %s}", count, offset, m)
+	ret := fmt.Sprintf("{\"count\": %d, \"limit\": 100, \"offset\": %d, \"data\": %s}", count, offset, m)
+	fmt.Printf(ret)
+	
 	setNoCache(w)
 	setJSONHeaders(w)
 	fmt.Fprintf(w, "%s\n", ret)
@@ -677,9 +685,9 @@ func handleFlightLogRequest(w http.ResponseWriter, r *http.Request) {
 	
 	switch command {
 	case "flights":
-		go handleFlightLogFlightsRequest(arguments, w, r)
+		handleFlightLogFlightsRequest(arguments, w, r)
 	case "events":
-		go handleFlightLogEventsRequest(arguments, w, r)
+		handleFlightLogEventsRequest(arguments, w, r)
 	case "kml":
 		handleFlightLogKMLRequest(arguments, w, r)
 	case "csv":

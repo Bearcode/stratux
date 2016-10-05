@@ -117,9 +117,10 @@ function FlightlogCtrl($rootScope, $scope, $state, $http, $interval) {
 
 	function getTowers() {
 		// Simple GET request example (note: responce is asynchronous)
-		$http.get(URL_TOWERS_GET).
+		$http.get("/flightlog/flights").
 		then(function (response) {
 			var towers = angular.fromJson(response.data);
+			console.dir(towers);
 			var cnt = 0;
 			for (var key in towers) {
 				if (towers[key].Messages_last_minute > 0) {
