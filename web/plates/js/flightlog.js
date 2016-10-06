@@ -18,7 +18,13 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 	$scope.$watch('playbackSpeed', function(newValue){
   		// send the new playback speed to the controller if a playback is active
   		if ($scope.ReplayMode) {
-  			//
+			var replayUrl = "http://" + URL_HOST_BASE + "/replay/speed/" + $scope.playbackSpeed;
+			$http.post(replayUrl).
+			then(function (response) {
+				// do nothing
+			}, function (response) {
+				// do nothing
+			});
   		}
 	});
 	

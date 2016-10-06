@@ -798,13 +798,15 @@ func handleFlightLogReplaySpeed(args []string, w http.ResponseWriter, r *http.Re
 		return
 	}
 		
-	speed, err := strconv.ParseInt(args[2], 10, 64)
+	speed, err := strconv.ParseInt(args[0], 10, 64)
 	if (err != nil) {
 		http.Error(w, "Error getting speed from Play request.", http.StatusBadRequest)
 		return
 	}
 
 	replaySpeed = speed
+	
+	fmt.Printf("Setting replay speed to %d\n", replaySpeed);
 	
 	setNoCache(w)
 	setJSONHeaders(w)
