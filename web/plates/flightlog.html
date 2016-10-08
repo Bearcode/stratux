@@ -70,6 +70,11 @@
 			<span class="panel_label">Flight Details</span>
 		</div>
 		<div class="panel-body">
+		
+<div>
+    <rzslider rz-slider-model="priceSlider"></rzslider>
+</div>
+		
 			<div class="row">
 				<div class="col-lg-12">
 					<span class="col-xs-2" ng-hide="showReg"><strong>Event</strong></span>
@@ -81,7 +86,7 @@
 			</div>
 			
 			<!-- events -->
-			<div class="row" ng-repeat="event in flight_events | orderBy: 'id'">
+			<div class="row" ng-repeat="event in flight_events | orderBy: 'timestamp'">
 				<div class="separator"></div>
 				<div class="col-lg-12">
 					<span class="col-xs-2" ng-hide="showReg">{{event.event}}</span>

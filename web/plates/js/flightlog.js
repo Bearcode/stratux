@@ -1,4 +1,5 @@
 angular.module('appControllers').controller('FlightlogCtrl', FlightlogCtrl); // get the main module contollers set
+
 StatusCtrl.$inject = ['$rootScope', '$scope', '$state', '$http', '$interval',  '$location', '$window']; // Inject my dependencies
 
 // create our controller function with all necessary logic
@@ -14,7 +15,8 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 	
 	$scope.currentPage = 1;
 	$scope.pageSize = 10;
-  
+  	$scope.priceSlider = 150;
+  	
 	$scope.$watch('playbackSpeed', function(newValue){
   		// send the new playback speed to the controller if a playback is active
   		if ($scope.ReplayMode) {
@@ -241,8 +243,8 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 				var s = getShortTime(m)
 				evt.timeZulu = s
 				evt.timeLocal = getShortTimeLocal(m)
-				evt.timestamp = ce.timestamp_id
-				evt.id = ce.id
+				evt.timestamp = parseInt(ce.timestamp_id)
+				evt.id = parseInt(ce.id)
 				evt.flight = id;
 				
 				//TODO: do something with this data - create slider / ticker
