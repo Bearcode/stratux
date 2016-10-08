@@ -720,7 +720,8 @@ func handleFlightLogReplayPlay(args []string, w http.ResponseWriter, r *http.Req
 
 	var flight int64 = 0
 	var speed int64 = 1
-
+	var tstamp int64 = 0
+	
 	// next parameter is the flight ID. Use 0 to stop current playback
 	flight, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil {
@@ -736,6 +737,14 @@ func handleFlightLogReplayPlay(args []string, w http.ResponseWriter, r *http.Req
 		}
 	}
 	
+	if len(args) > 2 {
+		tstamp, err = strconv.ParseInt(args[2], 10, 64)
+		if (err != nil) {
+			http.Error(w, "Error getting starting timestamp from Play request.", http.StatusBadRequest)
+			return
+		}
+	}
+	
 	var ret string
 	if (flight == 0) {
 		if (!globalStatus.ReplayMode) {
@@ -745,8 +754,11 @@ func handleFlightLogReplayPlay(args []string, w http.ResponseWriter, r *http.Req
 			abortReplay = true
 		}
 	} else {
+		if (!globalStatus.ReplayMode) {
+			// no replay active or terminating
+		}
 		abortReplay = false
-		go replayFlightLog(flight, speed, 0)
+		replayFlightLog(flight, speed, tstamp)
 		ret = fmt.Sprintf("{\"status\": \"playing\", \"speed\": %d, \"flight\": %d}", speed, flight)
 	}
 	

@@ -428,16 +428,23 @@ type DataLogRow struct {
 	ts_num int64
 }
 
+type ReplayData struct {
+	flight int64
+	timestamp int64
+	speed int64
+}
+
 var dataLogChan chan DataLogRow
 var shutdownDataLog chan bool
 var shutdownDataLogWriter chan bool
 var dataUpdateChan chan bool
 var dataLogWriteChan chan DataLogRow
+var replayChan chan ReplayData
 
 func dataLogWriter(db *sql.DB) {
 	dataLogWriteChan = make(chan DataLogRow, 10240)
 	shutdownDataLogWriter = make(chan bool)
-	dataUpdateChan = make(chan bool)
+	dataUpdateChan = make(chan bool, 1024)
 	// The write queue. As data comes in via dataLogChan, it is timestamped and stored.
 	//  When writeTicker comes up, the queue is emptied.
 	writeTicker := time.NewTicker(1 * time.Second)
@@ -720,6 +727,7 @@ var flightlog FlightLog
 /*
 	replayFlightLog(flight int): replay a flight at a given speed
 */
+
 var replaySpeed int64 = 1
 var pauseReplay bool
 var abortReplay bool
@@ -731,6 +739,7 @@ func replayUAT(flight int64, db *sql.DB, timestamp int64) {
 	
 	var ts1, ts2 int64
 	var data string
+	var msgCount int64
 	
 	uatReplayComplete = false
 	
@@ -744,6 +753,8 @@ func replayUAT(flight int64, db *sql.DB, timestamp int64) {
 	defer rows.Close()
 	
 	for rows.Next() {
+		
+		msgCount++
 		
 		if (ts1 == 0) {
 			err = rows.Scan(&ts1, &data)
@@ -765,44 +776,63 @@ func replayUAT(flight int64, db *sql.DB, timestamp int64) {
 		} 
 
 		if data == "" {
-			fmt.Println("Skipping empty message")
 			continue
 		}
 		
 		// wait for the appropriate number of ms
 		var counter int64 = 0
 		delta := (ts2 - ts1)
-		for {
-			time.Sleep(1 * time.Millisecond)
-			counter++
-			if abortReplay || (counter >= (delta / replaySpeed)) {
-				break;
+		wait := (delta / replaySpeed)
+		
+		// drop messages inversely proportional to speed of playback (i.e. 0 drop at 1x, 90% drop at 10x)
+		if (msgCount % replaySpeed) == 0 {
+			
+			for {
+				time.Sleep(1 * time.Millisecond)
+				counter++
+				if abortReplay || (counter >= wait) {
+					break;
+				}
 			}
+			
+			// queue the message
+			o, msgtype := parseInput(data)
+			if o != nil && msgtype != 0 {
+				relayMessage(msgtype, o)
+			}	
 		}
+		
+		// shuffle the timestamps
 		ts1 = ts2
 		ts2 = 0
-		
-		// queue the message
-		o, msgtype := parseInput(data)
-		if o != nil && msgtype != 0 {
-			relayMessage(msgtype, o)
+
+		if pauseReplay {
+			for {
+				if (!pauseReplay) || (abortReplay) {
+					break
+				}
+				time.Sleep(1 * time.Millisecond)
+			}
 		}
 		
 		if abortReplay {
 			uatReplayComplete = true
-			fmt.Printf("Aborting playback of UAT log at %d\n", ts2)
-			return
+			break
 		}
 	}
 	
-	fmt.Println("Completed playback of UAT log.")
+
 	uatReplayComplete = true
+	if uatReplayComplete && esReplayComplete && situationReplayComplete {
+		globalStatus.ReplayMode = false
+	}
 }
 
 func replay1090(flight int64, db *sql.DB, timestamp int64) {
 	
 	var ts1, ts2 int64
 	var data string
+	var msgCount int64
 	
 	esReplayComplete = false
 	
@@ -838,34 +868,54 @@ func replay1090(flight int64, db *sql.DB, timestamp int64) {
 		// wait for the appropriate number of ms
 		var counter int64 = 0
 		delta := (ts2 - ts1)
-		for {
-			time.Sleep(1 * time.Millisecond)
-			counter++
-			if abortReplay || (counter >= (delta / replaySpeed)) {
-				break;
+		wait := (delta / replaySpeed)
+		
+		// drop messages inversely proportional to speed
+		if (msgCount % replaySpeed) == 0 {
+			
+			for {
+				time.Sleep(1 * time.Millisecond)
+				counter++
+				if abortReplay || (counter >= wait) {
+					break;
+				}
 			}
+			
+			// queue the 1090-ES message
+			var newTi *dump1090Data
+			err = json.Unmarshal([]byte(data), &newTi)
+			if err != nil {
+				log.Printf("can't read ES traffic information from %s: %s\n", data, err.Error())
+			} else {
+				parseDump1090Record(newTi)
+			}
+			
 		}
+		
+		// shuffle the timestamps
 		ts1 = ts2
 		ts2 = 0
 		
-		// queue the 1090-ES message
-		var newTi *dump1090Data
-		err = json.Unmarshal([]byte(data), &newTi)
-		if err != nil {
-			log.Printf("can't read ES traffic information from %s: %s\n", data, err.Error())
-			continue
+		if pauseReplay {
+			for {
+				if (!pauseReplay) || (abortReplay) {
+					break
+				}
+				time.Sleep(1 * time.Millisecond)
+			}
 		}
-		parseDump1090Record(newTi)
-		
+
 		if abortReplay {
 			esReplayComplete = true
-			fmt.Printf("Aborting playback of 1090-ES log at %d\n", ts2)
-			return
+			break
 		}
 	}
 	
-	fmt.Println("Completed playback of 1090-ES log.")
 	esReplayComplete = true
+	if uatReplayComplete && esReplayComplete && situationReplayComplete {
+		globalStatus.ReplayMode = false
+	} 
+	
 }
 
 /*
@@ -911,38 +961,69 @@ func replaySituation(flight int64, db *sql.DB, timestamp int64) {
 		// wait for the appropriate number of ms
 		var counter int64 = 0
 		delta := (ts2 - ts1)
-		for {
-			time.Sleep(1 * time.Millisecond)
-			counter++
-			if abortReplay || (counter >= (delta / replaySpeed)) {
-				break;
-			}
+		wait := (delta / replaySpeed)
+		
+		// ignore dupes / noise
+		if (wait) > 20 {
+			
+			for {
+				time.Sleep(1 * time.Millisecond)
+				counter++
+				if abortReplay || (counter >= wait) {
+					break;
+				}
+			}	
 		}
+		
+		// shuffle the timestamps
 		ts1 = ts2
 		ts2 = 0
+
 
 		// don't do anything else - the ownship message should be sent out
 		// by the heartBeatSender
 		
+
+		if pauseReplay {
+			for {
+				if (!pauseReplay) || (abortReplay) {
+					break
+				}
+				time.Sleep(1 * time.Millisecond)
+			}
+		}
+
 		if abortReplay {
 			situationReplayComplete = true
-			fmt.Printf("Aborting playback of mySituation log at %d\n", ts2)
-			return
+			break
 		}
 	}
-	
-	fmt.Println("Completed playback of mySituation log.")
 
 	situationReplayComplete = true
+	if uatReplayComplete && esReplayComplete && situationReplayComplete {
+		globalStatus.ReplayMode = false
+	}
 }
 
-func replayFlightLog(flight int64, speed int64, timestamp int64) {
+
+/*
+listen for replay requests on the replay channel
+	when a replay request arrives
+	if we are already replaying,
+		tell the play threads to stop
+		wait for them to stop
 	
-	fmt.Printf("Starting reply of flight %d at speed %d.\n", flight, speed)
+	reset the paused flag
+	create play threads passing flight, speed, offset
 	
-	// initialize replay mode 
-	replaySpeed = speed
-	globalStatus.ReplayMode = true
+	wait for:
+	new request
+	terminate message
+	
+*/
+func flightLogReplayThread() {
+
+	var rr *ReplayData
 	
 	// open another connection to the database
 	db, err := sql.Open("sqlite3", dataLogFilef)
@@ -952,21 +1033,50 @@ func replayFlightLog(flight int64, speed int64, timestamp int64) {
 
 	defer db.Close()
 	
-	go replayUAT(flight, db, timestamp)
-	go replay1090(flight, db, timestamp)
-	go replaySituation(flight, db, timestamp)
-	
 	for {
-		time.Sleep(50 * time.Millisecond)
-		if uatReplayComplete && esReplayComplete && situationReplayComplete {
-			break
+		
+		if (rr != nil) {
+			// if necessary, wait for an existing replay to stop
+			if (globalStatus.ReplayMode) {
+				abortReplay = true
+				for {
+					time.Sleep(10 * time.Millisecond)
+					if (!globalStatus.ReplayMode) {
+						break
+					}
+				}
+			}
+			
+			// now start the next replay
+			globalStatus.ReplayMode = true
+			pauseReplay = false
+			abortReplay = false
+			
+			go replayUAT(rr.flight, db, rr.timestamp)
+			go replay1090(rr.flight, db, rr.timestamp)
+			go replaySituation(rr.flight, db, rr.timestamp)
+		}
+		
+		// wait for another request
+		select {
+		case rp, ok := <-replayChan:
+			if (ok) {
+				rr = &rp
+			} else {
+				return
+			}
 		}
 	}
+}
+
+func replayFlightLog(flight int64, speed int64, timestamp int64) {
 	
-	globalStatus.ReplayMode = false
+	var replay ReplayData
+	replay.flight = flight
+	replay.timestamp = timestamp
+	replay.speed = speed
 	
-	fmt.Println("Completed playback of replay log.")
-	
+	replayChan <- replay
 }
 
 
@@ -1329,6 +1439,9 @@ func initDataLog() {
 	insertBatchIfs = make(map[string][][]interface{})
 	go dataLogWatchdog()
 	//log.Printf("datalog.go: initDataLog() complete.\n") //REMOVE -- DEBUG
+	
+	replayChan = make(chan ReplayData)
+	go flightLogReplayThread()
 }
 
 /*

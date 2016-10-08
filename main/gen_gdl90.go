@@ -576,7 +576,7 @@ func relayMessage(msgtype uint16, msg []byte) {
 }
 
 func heartBeatSender() {
-	timer := time.NewTicker(500 * time.Millisecond)
+	timer := time.NewTicker(1 * time.Second)
 	timerMessageStats := time.NewTicker(2 * time.Second)
 	for {
 		select {

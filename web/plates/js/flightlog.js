@@ -29,7 +29,7 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 	});
 	
 	$scope.replayFlight = function (id) {
-		var replayUrl = "http://" + URL_HOST_BASE + "/replay/play/" + id + "/" + $scope.playbackSpeed;
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/play/" + id + "/" + $scope.playbackSpeed + "/0";
 		$http.post(replayUrl).
 		then(function (response) {
 			$scope.CurrentFlight = id;
@@ -60,7 +60,7 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 	}
 	
 	$scope.jumpToTimestamp = function(ts, flight) {
-		var replayUrl = "http://" + URL_HOST_BASE + "/replay/jump/" + flight + "/" + ts;
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/play/" + flight + "/" + $scope.playbackSpeed + "/" + ts;
 		$http.post(replayUrl).
 		then(function (response) {
 			// do nothing
@@ -224,6 +224,9 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 			var tmp = [];
 			var last = "";
 			
+			var minTS = -1;
+			var maxTS = 0;
+			
 			for (var i = 0; i < events.length; i++) {
 				var ce = events[i];
 				
@@ -238,9 +241,20 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 				var s = getShortTime(m)
 				evt.timeZulu = s
 				evt.timeLocal = getShortTimeLocal(m)
-				evt.timestamp = ce.timestamp
+				evt.timestamp = ce.timestamp_id
 				evt.id = ce.id
 				evt.flight = id;
+				
+				//TODO: do something with this data - create slider / ticker
+				if (minTS < 0) {
+					minTS = ce.timestamp_id;
+				}
+				if (ce.timestamp_id < minTS) {
+					minTS = ce.timestamp_id;
+				}
+				if (ce.timestamp_id > maxTS) {
+					maxTS = ce.timestamp_id;
+				}
 				
 				last = ce.event;
 				
