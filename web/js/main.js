@@ -15,7 +15,7 @@ var URL_SHUTDOWN		= "http://" + URL_HOST_BASE + "/shutdown";
 
 // define the module with dependency on mobile-angular-ui
 //var app = angular.module('stratux', ['ngRoute', 'mobile-angular-ui', 'mobile-angular-ui.gestures', 'appControllers']);
-var app = angular.module('stratux', ['ui.router', 'mobile-angular-ui', 'mobile-angular-ui.gestures', 'appControllers']);
+var app = angular.module('stratux', ['ui.router', 'mobile-angular-ui', 'mobile-angular-ui.gestures', 'appControllers', 'rzModule']);
 var appControllers = angular.module('appControllers', []);
 
 
@@ -57,16 +57,16 @@ app.config(function ($stateProvider, $urlRouterProvider) {
 			controller: 'LogsCtrl',
 			reloadOnSearch: false
 		})
-		.state('settings', {
-			url: '/settings',
-			templateUrl: 'plates/settings.html',
-			controller: 'SettingsCtrl',
-			reloadOnSearch: false
-		})
 		.state('flightlog', {
 			url: '/flightlog',
 			templateUrl: 'plates/flightlog.html',
 			controller: 'FlightlogCtrl',
+			reloadOnSearch: false
+		})
+		.state('settings', {
+			url: '/settings',
+			templateUrl: 'plates/settings.html',
+			controller: 'SettingsCtrl',
 			reloadOnSearch: false
 		});
 	$urlRouterProvider.otherwise('/');

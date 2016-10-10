@@ -10,6 +10,7 @@ all:
 	cp js/main.js /var/www/js
 	cp js/addtohomescreen.min.js /var/www/js
 	cp js/j3di-all.min.js /var/www/js
+	cp js/rzslider.min.js /var/www/js
 	mkdir -p /var/www/img
 	cp img/logo*.png /var/www/img
 	cp img/screen*.png /var/www/img

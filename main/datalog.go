@@ -60,6 +60,14 @@ type StratuxStartup struct {
 	route      string	  // route of flight (list of airport ids / coordinate points)
 }
 
+type ReplayData struct {
+	Flight int64
+	Timestamp int64
+	Speed int64
+}
+
+var replayStatus ReplayData
+
 var dataLogStarted bool
 var dataLogReadyToWrite bool
 var lastSituationLogMs uint64
@@ -426,12 +434,6 @@ type DataLogRow struct {
 	tbl    string
 	data   interface{}
 	ts_num int64
-}
-
-type ReplayData struct {
-	flight int64
-	timestamp int64
-	speed int64
 }
 
 var dataLogChan chan DataLogRow
@@ -975,6 +977,9 @@ func replaySituation(flight int64, db *sql.DB, timestamp int64) {
 			}	
 		}
 		
+		// update the replay status used by the websocket
+		replayStatus.Timestamp = ts2
+		
 		// shuffle the timestamps
 		ts1 = ts2
 		ts2 = 0
@@ -1051,10 +1056,11 @@ func flightLogReplayThread() {
 			globalStatus.ReplayMode = true
 			pauseReplay = false
 			abortReplay = false
+			replaySpeed = rr.Speed
 			
-			go replayUAT(rr.flight, db, rr.timestamp)
-			go replay1090(rr.flight, db, rr.timestamp)
-			go replaySituation(rr.flight, db, rr.timestamp)
+			go replayUAT(rr.Flight, db, rr.Timestamp)
+			go replay1090(rr.Flight, db, rr.Timestamp)
+			go replaySituation(rr.Flight, db, rr.Timestamp)
 		}
 		
 		// wait for another request
@@ -1072,9 +1078,13 @@ func flightLogReplayThread() {
 func replayFlightLog(flight int64, speed int64, timestamp int64) {
 	
 	var replay ReplayData
-	replay.flight = flight
-	replay.timestamp = timestamp
-	replay.speed = speed
+	replay.Flight = flight
+	replay.Timestamp = timestamp
+	replay.Speed = speed
+	
+	replayStatus.Flight = flight
+	replayStatus.Speed = speed
+	replayStatus.Timestamp = timestamp
 	
 	replayChan <- replay
 }

@@ -147,6 +147,21 @@ func handleSituationWS(conn *websocket.Conn) {
 
 }
 
+func handleReplayWS(conn *websocket.Conn) {
+	timer := time.NewTicker(500 * time.Millisecond)
+	for {
+		<-timer.C
+		replayJSON, _ := json.Marshal(&replayStatus)
+		_, err := conn.Write(replayJSON)
+
+		if err != nil {
+			break
+		}
+
+	}
+
+}
+
 // AJAX call - /getStatus. Responds with current global status
 // a webservice call for the same data available on the websocket but when only a single update is needed
 func handleStatusRequest(w http.ResponseWriter, r *http.Request) {
@@ -720,7 +735,8 @@ func handleFlightLogReplayPlay(args []string, w http.ResponseWriter, r *http.Req
 
 	var flight int64 = 0
 	var speed int64 = 1
-
+	var timestamp int64 = 0
+	
 	// next parameter is the flight ID. Use 0 to stop current playback
 	flight, err := strconv.ParseInt(args[0], 10, 64)
 	if err != nil {
@@ -730,6 +746,14 @@ func handleFlightLogReplayPlay(args []string, w http.ResponseWriter, r *http.Req
 	
 	if len(args) > 1 {
 		speed, err = strconv.ParseInt(args[1], 10, 64)
+		if (err != nil) {
+			http.Error(w, "Error getting speed from Play request.", http.StatusBadRequest)
+			return
+		}
+	}
+	
+	if len(args) > 2 {
+		timestamp, err = strconv.ParseInt(args[2], 10, 64)
 		if (err != nil) {
 			http.Error(w, "Error getting speed from Play request.", http.StatusBadRequest)
 			return
@@ -746,8 +770,8 @@ func handleFlightLogReplayPlay(args []string, w http.ResponseWriter, r *http.Req
 		}
 	} else {
 		abortReplay = false
-		go replayFlightLog(flight, speed, 0)
-		ret = fmt.Sprintf("{\"status\": \"playing\", \"speed\": %d, \"flight\": %d}", speed, flight)
+		go replayFlightLog(flight, speed, timestamp)
+		ret = fmt.Sprintf("{\"status\": \"playing\", \"speed\": %d, \"flight\": %d, \"timestamp\": %d}", speed, flight, timestamp)
 	}
 	
 	setNoCache(w)
@@ -805,6 +829,7 @@ func handleFlightLogReplaySpeed(args []string, w http.ResponseWriter, r *http.Re
 	}
 
 	replaySpeed = speed
+	replayStatus.Speed = speed
 	
 	fmt.Printf("Setting replay speed to %d\n", replaySpeed);
 	
@@ -1090,6 +1115,12 @@ func managementInterface() {
 		func(w http.ResponseWriter, req *http.Request) {
 			s := websocket.Server{
 				Handler: websocket.Handler(handleTrafficWS)}
+			s.ServeHTTP(w, req)
+		})
+	http.HandleFunc("/replay/socket",
+		func(w http.ResponseWriter, req *http.Request) {
+			s := websocket.Server{
+				Handler: websocket.Handler(handleReplayWS)}
 			s.ServeHTTP(w, req)
 		})
 
