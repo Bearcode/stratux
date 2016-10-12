@@ -49,17 +49,6 @@ type StratuxTimestamp struct {
 	StartupID            int64
 }
 
-// 'startup' table creates a new entry each time the daemon is started. This keeps track of sequential starts, even if the
-//  timestamp is ambiguous (units with no GPS). This struct is just a placeholder for an empty table (other than primary key).
-type StratuxStartup struct {
-	id         int64
-	start_loc  string     // starting location (airport or GPS coordinate)
-	start_ts   string 	  // starting timestamp (GPS date/time format)
-	duration   int64	  // duration of the flight in minutes
-	distance   int64      // distance of flight in nm
-	route      string	  // route of flight (list of airport ids / coordinate points)
-}
-
 type ReplayData struct {
 	Flight int64
 	Timestamp int64
@@ -365,40 +354,14 @@ func insertData(i interface{}, tbl string, db *sql.DB, ts_num int64) int64 {
 		values = append(values, v)
 	}
 
-	// Add the timestamp_id field to link up with the timestamp table.
+	// Add the timestamp_id and startup_id fields
 	if tbl != "timestamp" && tbl != "startup" {
 		keys = append(keys, "timestamp_id")
-/*
-	NOTE: this has been disabled and will be removed. The logging system has been revised
-	to simply record the startup_id value and a timestamp_id which is the StratuxClock 
-	Millisecond value. (TODO: change that to 'timestamp' instead of 'timestamp_id'). The
-	value of timestamp_id is relative to the startup time for the associated startup.
-	
-	Example: Flight is part of startup 92. The startup record's start_timestamp (Unix 
-	timestamp) equates to "2016-09-28 11:22:14.9 +0000 UTC". Each timestamp_id value is
-	the number of nanoseconds since the startup (taken from stratuxClock).
-	
-	To convert a specific timestamp to a time literal, simply add it to the start_timestamp
-	value and then convert the Unix timestamp (milliseconds) to UTC or a local date/time.
-	
-	This change simplifies the process of gathering data associated with a given startup
-	and also significantly reduces the number of writes to the database.
-	
-		if dataLogTimestamps[ts_num].id == 0 {
-			//FIXME: This is somewhat convoluted. When insertData() is called for a ts_num that corresponds to a timestamp with no database id,
-			// then it inserts that timestamp via the same interface and the id is updated in the structure via the below lines
-			// (dataLogTimestamps[ts_num].id = id).
-			dataLogTimestamps[ts_num].StartupID = stratuxStartupID
-			insertData(dataLogTimestamps[ts_num], "timestamp", db, ts_num) // Updates dataLogTimestamps[ts_num].id.
-		}
-*/
-		// revised: simply uses ms value from stratuxClock now - see above note.
 		values = append(values, strconv.FormatInt(int64(stratuxClock.Milliseconds), 10))
 		keys = append(keys, "startup_id")
 		values = append(values, strconv.FormatInt(stratuxStartupID, 10))
 	}
 
-//TODO: create and cache a statement for each table - no reason to re-create each time
 	if _, ok := insertString[tbl]; !ok {
 		// Prepare the statement.
 		tblInsert := fmt.Sprintf("INSERT INTO %s (%s) VALUES(%s)", tbl, strings.Join(keys, ","),
@@ -737,6 +700,13 @@ var uatReplayComplete bool
 var esReplayComplete bool
 var situationReplayComplete bool
 
+func resetReplay() {
+	globalStatus.ReplayMode = false
+	replayStatus.Flight = 0
+	replayStatus.Speed = 0
+	replayStatus.Timestamp = 0
+}
+
 func replayUAT(flight int64, db *sql.DB, timestamp int64) {
 	
 	var ts1, ts2 int64
@@ -826,7 +796,7 @@ func replayUAT(flight int64, db *sql.DB, timestamp int64) {
 
 	uatReplayComplete = true
 	if uatReplayComplete && esReplayComplete && situationReplayComplete {
-		globalStatus.ReplayMode = false
+		resetReplay()
 	}
 }
 
@@ -915,7 +885,7 @@ func replay1090(flight int64, db *sql.DB, timestamp int64) {
 	
 	esReplayComplete = true
 	if uatReplayComplete && esReplayComplete && situationReplayComplete {
-		globalStatus.ReplayMode = false
+		resetReplay()
 	} 
 	
 }
@@ -1006,7 +976,7 @@ func replaySituation(flight int64, db *sql.DB, timestamp int64) {
 
 	situationReplayComplete = true
 	if uatReplayComplete && esReplayComplete && situationReplayComplete {
-		globalStatus.ReplayMode = false
+		resetReplay()
 	}
 }
 
@@ -1057,6 +1027,10 @@ func flightLogReplayThread() {
 			pauseReplay = false
 			abortReplay = false
 			replaySpeed = rr.Speed
+			
+			replayStatus.Speed = rr.Speed
+			replayStatus.Flight = rr.Flight
+			replayStatus.Timestamp = rr.Timestamp
 			
 			go replayUAT(rr.Flight, db, rr.Timestamp)
 			go replay1090(rr.Flight, db, rr.Timestamp)
@@ -1420,19 +1394,19 @@ func logSettings() {
 }
 
 func logTraffic(ti TrafficInfo) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (globalStatus.ReplayMode == false) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBUG) && (globalStatus.ReplayMode == false) {
 		dataLogChan <- DataLogRow{tbl: "traffic", data: ti}
 	}
 }
 
 func logMsg(m msg) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (globalStatus.ReplayMode == false)  {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (globalStatus.ReplayMode == false) && (flightState0 == FLIGHT_STATE_FLYING) {
 		dataLogChan <- DataLogRow{tbl: "messages", data: m}
 	}
 }
 
 func logESMsg(m esmsg) {
-	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel == FLIGHT_LOG_LEVEL_DEBRIEF) && (globalStatus.ReplayMode == false) {
+	if globalSettings.ReplayLog && isDataLogReady() && (globalSettings.FlightLogLevel > FLIGHT_LOG_LEVEL_DEBRIEF) && (globalStatus.ReplayMode == false) && (flightState0 == FLIGHT_STATE_FLYING) {
 		dataLogChan <- DataLogRow{tbl: "es_messages", data: m}
 	}
 }

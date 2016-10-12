@@ -9,11 +9,15 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 	$scope.data_list = [];
 	$scope.flight_events = [];
 	$scope.ReplayMode = false;
+	$scope.ReplayPaused = false;
 	$scope.currentFlight = 0;
 	$scope.speeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 	$scope.playbackSpeed = 1;
 	$scope.currentPage = 1;
 	$scope.pageSize = 10;
+	$scope.selectedIndex = -1;
+	$scope.flightToDelete = -1;
+	
   	$scope.timeSlider = {
   		value: 0,
   		options: {
@@ -21,6 +25,9 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
   			floor: 0,
   			hideLimitLabels: true,
   			disabled: true,
+  			translate: function(value) {
+  				return secondsToHms(value);
+  			},
   			onChange: function () {
   				var ts = ($scope.timeSlider.value * 1000);
 				var replayUrl = "http://" + URL_HOST_BASE + "/replay/play/" + $scope.currentFlight + "/" + $scope.playbackSpeed + "/" + ts;
@@ -34,6 +41,11 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
             }
   		}
   	};
+  	
+  	$scope.$watch('ReplayMode', function(newValue){
+  		console.log("Replay mode changed: " + newValue);
+  		$scope.timeSlider.options.disabled = !newValue;
+  	});
   	
 	$scope.$watch('playbackSpeed', function(newValue){
   		// send the new playback speed to the controller if a playback is active
@@ -52,6 +64,7 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 		var replayUrl = "http://" + URL_HOST_BASE + "/replay/play/" + id + "/" + $scope.playbackSpeed + "/0";
 		$http.post(replayUrl).
 		then(function (response) {
+			$scope.ReplayPaused = false;
 			$scope.currentFlight = id;
 			getEvents(id);
 		}, function (response) {
@@ -63,7 +76,17 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 		var replayUrl = "http://" + URL_HOST_BASE + "/replay/pause";
 		$http.post(replayUrl).
 		then(function (response) {
+			$scope.ReplayPaused = true;
+		}, function (response) {
 			// do nothing
+		});
+	}
+	
+	$scope.resumeReplay = function() {
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/resume";
+		$http.post(replayUrl).
+		then(function (response) {
+			$scope.ReplayPaused = false;
 		}, function (response) {
 			// do nothing
 		});
@@ -90,7 +113,24 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 		});
 	}
 	
-	$scope.getDetails = function(id) {
+	$scope.preDeleteFlight = function (id) {
+		$scope.flightToDelete = id;
+	};
+	
+	$scope.deleteFlight = function () {
+		var replayUrl = "http://" + URL_HOST_BASE + "/flightlog/delete/" + $scope.flightToDelete;
+		$http.post(replayUrl).
+		then(function (response) {
+			if ($scope.currentFlight == id) {
+				$scope.currentFlight = 0;
+			}
+		}, function (response) {
+			// do nothing
+		});
+	};
+	
+	$scope.getDetails = function($index, id) {
+		$scope.selectedIndex = $index;
 		$scope.currentFlight = id;
 		getEvents(id);
 	}
@@ -146,7 +186,7 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 			return; // we are getting called once after clicking away from the status page
 
 		if (($scope.rsocket === undefined) || ($scope.rsocket === null)) {
-			rsocket = new WebSocket("ws://192.168.10.1/replay/socket");
+			rsocket = new WebSocket(URL_REPLAY_WS);
 			$scope.rsocket = rsocket; // store socket in scope for enter/exit usage
 		}
 
@@ -175,9 +215,15 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 			//console.log('Received status update.')
 
 			var status = JSON.parse(msg.data)
+			
 			// Update Status
-//console.log(status)
 			$scope.timeSlider.value = (parseInt(status.Timestamp) / 1000);
+			
+			var flight = parseInt(status.Flight);
+			if (($scope.currentFlight != flight) && (flight != 0)) {
+				$scope.currentFlight = flight;
+				getEvents(flight);
+			}
 
 			$scope.$apply(); // trigger any needed refreshing of data
 		};
@@ -228,30 +274,6 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 		getFlights();
 	}
 
-	function setHardwareVisibility() {
-		$scope.visible_uat = true;
-		$scope.visible_es = true;
-		$scope.visible_gps = true;
-		$scope.visible_ahrs = true;
-
-		// Simple GET request example (note: responce is asynchronous)
-		$http.get(URL_SETTINGS_GET).
-		then(function (response) {
-			settings = angular.fromJson(response.data);
-			$scope.visible_uat = settings.UAT_Enabled;
-			$scope.visible_es = settings.ES_Enabled;
-			$scope.visible_ping = settings.Ping_Enabled;
-			if (settings.Ping_Enabled) {
-				$scope.visible_uat = true;
-				$scope.visible_es = true;
-			}
-			$scope.visible_gps = settings.GPS_Enabled;
-			$scope.visible_ahrs = settings.AHRS_Enabled;
-		}, function (response) {
-			// nop
-		});
-	};
-
 	function getFlights() {
 		// Simple GET request example (note: responce is asynchronous)
 		$http.get("/flightlog/flights").
@@ -262,12 +284,12 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 			
 			for (var i = 0; i < cnt; i++) {
 				flight = flights[i];
+				flight.id = parseInt(flight.id);
 				var m = new Date(parseInt(flight.start_timestamp));				  
 				flight.date = getShortDate(m);
 				flight.time = getShortTime(m);
 				flight.distance = Math.round(parseFloat(flight.distance), 2);
 				flight.hms = secondsToHms(flight.duration);
-				console.dir(flight);
 			}
 			$scope.data_list = flights;
 			//$scope.UAT_Towers = cnt;
@@ -299,10 +321,13 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 				
 				var evt = {};
 				evt.event = ce.event;
-				evt.location = ce.airport_name + " (" + ce.airport_id + ")"
+				evt.location = ce.airport_id; //ce.airport_name + " (" + ce.airport_id + ")"
 				var m = new Date(parseInt(ce.timestamp) * 1000);
 				evt.timeZulu = getShortTime(m)
 				evt.timeLocal = getShortTimeLocal(m)
+				var seconds = ce.timestamp_id / 1000;
+				evt.seconds = seconds;
+				evt.timeHMS = secondsToHms(seconds);
 				evt.timestamp = parseInt(ce.timestamp_id)
 				evt.id = parseInt(ce.id)
 				evt.flight = id;
@@ -337,26 +362,22 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 	};
 
 
-	// periodically get the tower list
-	var updateTowers = $interval(function () {
-		// refresh tower count once each 5 seconds (aka polling)
-		//getTowers();
-	}, (5 * 1000), 0, false);
-
-
 	$state.get('home').onEnter = function () {
 		// everything gets handled correctly by the controller
 	};
+	
 	$state.get('home').onExit = function () {
 		if (($scope.socket !== undefined) && ($scope.socket !== null)) {
 			$scope.socket.close();
 			$scope.socket = null;
 		}
-		$interval.cancel(updateTowers);
+		if (($scope.rsocket !== undefined) && ($scope.rsocket !== null)) {
+			$scope.rsocket.close();
+			$scope.rsocket = null;
+		}
 	};
 
-	// Status Controller tasks
-	setHardwareVisibility();
+	// Flightlog Controller tasks
 	connect($scope); // connect - opens a socket and listens for messages
 	replay($scope);
 };

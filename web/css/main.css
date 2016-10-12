@@ -415,3 +415,12 @@ pre {
 		transition: transform 0 ease;
 	}
 }
+
+/* flightlog stuff */
+
+.flightrow:hover {
+	background-color: #ddd;
+}
+.selected {
+	background-color: aliceblue;
+}

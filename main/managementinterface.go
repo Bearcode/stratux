@@ -642,7 +642,52 @@ func handleFlightLogDeleteRequest(args []string, w http.ResponseWriter, r *http.
     	return
 	}
 	
-	fmt.Printf("Flight ID: %d\n", flight)
+	sql := fmt.Sprintf("DELETE FROM events WHERE startup_id = %d;", flight);
+	fmt.Println(sql)
+	_, err = db.Exec(sql)
+	if (err != nil) {
+		fmt.Printf("Error deleting events: %s.\n", err.Error())
+	}
+	
+	sql = fmt.Sprintf("DELETE FROM messages WHERE startup_id = %d;", flight);
+	fmt.Println(sql)
+	_, err = db.Exec(sql)
+	if (err != nil) {
+		fmt.Printf("Error deleting messages: %s.\n", err.Error())
+	}
+	
+	sql = fmt.Sprintf("DELETE FROM es_messages WHERE startup_id = %d;", flight);
+	fmt.Println(sql)
+	_, err = db.Exec(sql)
+	if (err != nil) {
+		fmt.Printf("Error deleting es_messages: %s.\n", err.Error())
+	}
+	
+	sql = fmt.Sprintf("DELETE FROM traffic WHERE startup_id = %d;", flight);
+	fmt.Println(sql)
+	_, err = db.Exec(sql)
+	if (err != nil) {
+		fmt.Printf("Error deleting traffic: %s.\n", err.Error())
+	}
+	
+	sql = fmt.Sprintf("DELETE FROM mySituation WHERE startup_id = %d;", flight);
+	fmt.Println(sql)
+	_, err = db.Exec(sql)
+	if (err != nil) {
+		fmt.Printf("Error deleting mySituation: %s.\n", err.Error())
+	}
+	
+	sql = fmt.Sprintf("DELETE FROM startup WHERE id = %d;", flight);
+	fmt.Println(sql)
+	_, err = db.Exec(sql)
+	if (err != nil) {
+		fmt.Printf("Error deleting flight: %s.\n", err.Error())
+	}
+	
+	ret := fmt.Sprintf("{\"deleted\": %d}", flight)
+	setNoCache(w)
+	setJSONHeaders(w)
+	fmt.Fprintf(w, "%s\n", ret)
 }
 
 func handleFlightLogPruneRequest(args []string, w http.ResponseWriter, r *http.Request) {

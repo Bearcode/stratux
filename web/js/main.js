@@ -9,6 +9,7 @@ var URL_SATELLITES_GET	= "http://"	+ URL_HOST_BASE + "/getSatellites"
 var URL_STATUS_WS 		= "ws://"	+ URL_HOST_BASE + "/status"
 var URL_TRAFFIC_WS 		= "ws://"	+ URL_HOST_BASE + "/traffic";
 var URL_WEATHER_WS 		= "ws://"	+ URL_HOST_BASE + "/weather";
+var URL_REPLAY_WS       = "ws://"   + URL_HOST_BASE + "/replay/socket";
 var URL_UPDATE_UPLOAD	= "http://" + URL_HOST_BASE + "/updateUpload";
 var URL_REBOOT			= "http://" + URL_HOST_BASE + "/reboot";
 var URL_SHUTDOWN		= "http://" + URL_HOST_BASE + "/shutdown";

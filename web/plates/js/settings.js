@@ -34,6 +34,7 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 		$scope.WatchList = settings.WatchList;
 		$scope.OwnshipModeS = settings.OwnshipModeS;
 		$scope.FlightLogLevel = settings.FlightLogLevel;
+		$scope.FlightLogLevels = [{"value": 1, "description": "Logbook"}, {"value": 2, "description": "Debrief"}, {"value": 3, "description": "Demo"}, {"value": 4, "description": "Debug"}];
 	}
 
 	function getSettings() {
@@ -143,18 +144,6 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 			// console.log(angular.toJson(newsettings));
 			setSettings(angular.toJson(newsettings));
 		}
-	};
-	$scope.postReplay = function () {
-		$window.location.href = "/";
-		$location.path('/home');
-		var replayUrl = "http://" + URL_HOST_BASE + "/replay/15/5"
-		$http.post(replayUrl).
-		then(function (response) {
-			// do nothing
-			// $scope.$apply();
-		}, function (response) {
-			// do nothing
-		});
 	};
 
 	$scope.postShutdown = function () {
