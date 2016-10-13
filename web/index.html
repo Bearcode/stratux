@@ -47,7 +47,7 @@
 	<link rel="stylesheet" href="maui/css/mobile-angular-ui-desktop.min.css" />
 	<link rel="stylesheet" href="css/main.css" />
 	<link rel="stylesheet" href="css/rzslider.min.css" />
-
+	
 	<script src="maui/js/angular.min.js"></script>
 	<script src="maui/js/angular-ui-router.min.js"></script>
 	<script src="maui/js/mobile-angular-ui.min.js"></script>
@@ -57,6 +57,7 @@
 	<!-- TODO: combine and minify the following javascript -->
 	<script src="js/main.js"></script>
 	<script src="js/rzslider.min.js"></script>
+	<script src="js/ti-segmented-control.js"></script>
 	<script src="plates/js/logs.js"></script>
 	<script src="plates/js/settings.js"></script>
 	<script src="plates/js/status.js"></script>
@@ -112,7 +113,8 @@
 		<div class="navbar navbar-app navbar-absolute-top">
 			<div class="navbar-brand navbar-brand-center" ui-yield-to="title">
 				<a href="#/">
-                    FlightBox <span style="font-size: 10px">Powered by Stratux</span>
+                    <span ng-hide="HardwareBuild != 'FlightBox'">FlightBox <span style="font-size: 10px">Powered by Stratux</span></span>
+                    <span ng-hide="HardwareBuild != ''">Stratux</span>
             </a>
 			</div>
 			<div class="btn-group pull-left">

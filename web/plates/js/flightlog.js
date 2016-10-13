@@ -11,7 +11,6 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 	$scope.ReplayMode = false;
 	$scope.ReplayPaused = false;
 	$scope.currentFlight = 0;
-	$scope.speeds = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 	$scope.playbackSpeed = 1;
 	$scope.currentPage = 1;
 	$scope.pageSize = 10;
@@ -60,12 +59,11 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
   		}
 	});
 	
-	$scope.replayFlight = function (id) {
-		var replayUrl = "http://" + URL_HOST_BASE + "/replay/play/" + id + "/" + $scope.playbackSpeed + "/0";
+	$scope.replayFlight = function () {
+		var replayUrl = "http://" + URL_HOST_BASE + "/replay/play/" + $scope.currentFlight + "/" + $scope.playbackSpeed + "/0";
 		$http.post(replayUrl).
 		then(function (response) {
 			$scope.ReplayPaused = false;
-			$scope.currentFlight = id;
 			getEvents(id);
 		}, function (response) {
 			// do nothing
@@ -220,9 +218,13 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 			$scope.timeSlider.value = (parseInt(status.Timestamp) / 1000);
 			
 			var flight = parseInt(status.Flight);
+			var speed = parseInt(status.Speed);
 			if (($scope.currentFlight != flight) && (flight != 0)) {
 				$scope.currentFlight = flight;
 				getEvents(flight);
+			}
+			if (($scope.playbackSpeed != speed) && (flight != 0)) {
+				$scope.playbackSpeed = speed;
 			}
 
 			$scope.$apply(); // trigger any needed refreshing of data
@@ -292,8 +294,6 @@ function FlightlogCtrl($rootScope, $scope, $state, $location, $window, $http, $i
 				flight.hms = secondsToHms(flight.duration);
 			}
 			$scope.data_list = flights;
-			//$scope.UAT_Towers = cnt;
-			//$scope.$apply();
 		}, function (response) {
 			$scope.raw_data = "error getting tower data";
 		});

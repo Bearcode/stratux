@@ -35,6 +35,7 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 		$scope.OwnshipModeS = settings.OwnshipModeS;
 		$scope.FlightLogLevel = settings.FlightLogLevel;
 		$scope.FlightLogLevels = [{"value": 1, "description": "Logbook"}, {"value": 2, "description": "Debrief"}, {"value": 3, "description": "Demo"}, {"value": 4, "description": "Debug"}];
+		$scope.HardwareBuild = "FlightBox";
 	}
 
 	function getSettings() {
@@ -48,6 +49,16 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 			for (i = 0; i < toggles.length; i++) {
 				settings[toggles[i]] = false;
 			}
+		});
+	};
+
+	function getStatus() {
+		// Simple GET request example (note: responce is asynchronous)
+		$http.get(URL_STATUS_GET).
+		then(function (response) {
+			$scope.HardwareBuild = response.data.HardwareBuild;
+		}, function (response) {
+			// GNDN
 		});
 	};
 
@@ -211,4 +222,6 @@ function SettingsCtrl($rootScope, $scope, $state, $location, $window, $http) {
 		});
 
 	};
+	
+	getStatus();
 };

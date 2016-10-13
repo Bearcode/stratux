@@ -424,3 +424,12 @@ pre {
 .selected {
 	background-color: aliceblue;
 }
+
+.replayButtons {
+	margin-top: 3px;
+}
+.speedRadio {
+	text-align: center;
+	width: 80px;
+	margin-top: 5px;
+}

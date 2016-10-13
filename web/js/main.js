@@ -16,7 +16,7 @@ var URL_SHUTDOWN		= "http://" + URL_HOST_BASE + "/shutdown";
 
 // define the module with dependency on mobile-angular-ui
 //var app = angular.module('stratux', ['ngRoute', 'mobile-angular-ui', 'mobile-angular-ui.gestures', 'appControllers']);
-var app = angular.module('stratux', ['ui.router', 'mobile-angular-ui', 'mobile-angular-ui.gestures', 'appControllers', 'rzModule']);
+var app = angular.module('stratux', ['ui.router', 'mobile-angular-ui', 'mobile-angular-ui.gestures', 'appControllers', 'rzModule', 'ti-segmented-control']);
 var appControllers = angular.module('appControllers', []);
 
 
@@ -79,6 +79,14 @@ app.run(function ($transform) {
 });
 
 // For this app we have a MainController for whatever and individual controllers for each page
-app.controller('MainCtrl', function ($rootScope, $scope) {
+app.controller('MainCtrl', function ($rootScope, $scope, $http) {
 	// any logic global logic
+	$scope.HardwareBuild = "Stratux";
+	
+	$http.get(URL_STATUS_GET).
+	then(function (response) {
+		$scope.HardwareBuild = response.data.HardwareBuild;
+	}, function (response) {
+		// GNDN
+	});
 });

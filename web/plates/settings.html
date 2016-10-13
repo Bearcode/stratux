@@ -16,7 +16,7 @@
 						<ui-switch ng-model='ES_Enabled' settings-change></ui-switch>
 					</div>
 				</div>
-				<div class="form-group">
+				<div class="form-group" ng-hide="HardwareBuild == 'FlightBox'">
 					<label class="control-label col-xs-7">Ping ADS-B</label>
 					<div class="col-xs-5">
 						<ui-switch ng-model='Ping_Enabled' settings-change></ui-switch>
@@ -28,7 +28,7 @@
 						<ui-switch ng-model='GPS_Enabled' settings-change></ui-switch>
 					</div>
 				</div>
-				<div class="form-group">
+				<div class="form-group" ng-hide="HardwareBuild == 'FlightBox'">
 					<label class="control-label col-xs-7">AHRS</label>
 					<div class="col-xs-5">
 						<ui-switch ng-model='AHRS_Enabled' settings-change></ui-switch>
@@ -48,7 +48,7 @@
 						<ui-switch ng-model='DisplayTrafficSource' settings-change></ui-switch>
 					</div>
 				</div>
-				<div class="form-group">
+				<div class="form-group" ng-hide="HardwareBuild == 'FlightBox'">
 					<label class="control-label col-xs-7">Verbose Message Log</label>
 					<div class="col-xs-5">
 						<ui-switch ng-model='DEBUG' settings-change></ui-switch>
